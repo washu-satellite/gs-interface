@@ -1,0 +1,9 @@
+{
+    "spec": "cfdp.sendFile",
+    "body": {
+        "sourceEntityId": 1,
+        "destinationEntityId": 2,
+        "sourceFileName": "file.txt",
+        "destinationFileName": "file copied.txt"
+    }
+}

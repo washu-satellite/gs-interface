@@ -1,0 +1,12 @@
+{
+    "spec": "cfdp.initCfdpEntity",
+    "body": {
+        "entityId": 1,
+        "mibPath": "ccsds\\configuration_entity_1.xml",
+        "filestorePath": "filestore1",
+        "tcpPort": 23001,
+        "udpPort": 1234,
+        "udpOutput": true,
+        "simulatedErrorRate": 0.1
+    }
+}

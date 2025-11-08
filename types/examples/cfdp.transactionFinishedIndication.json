@@ -1,0 +1,30 @@
+{
+    "spec": "cfdp.transactionFinishedIndication",
+    "body": {
+      "transactionId": 65537,
+      "conditionCode": "CC_NOERROR",
+      "fileStatus": "RETAINED_IN_FILESTORE",
+      "dataComplete": true,
+      "filestoreResponses": "",
+      "statusReport": {
+        "spec": "cfdp.cfdpTransactionStatus",
+        "body": {
+          "time": "2024-11-15T07:54:19.076079Z",
+          "managingEntity": 1,
+          "transactionId": 65537,
+          "sourceEntityId": 1,
+          "destinationEntityId": 2,
+          "isDestination": false,
+          "lastConditionCode": "CC_NOERROR",
+          "lastFaultEntity": "null",
+          "cfdpTransactionState": "RUNNING",
+          "progress": 7754,
+          "totalFileSize": 7754,
+          "transmissionMode": "Class 2",
+          "lastReceivedPduTime": "2024-11-15T07:54:19.062025Z",
+          "lastSentPduTime": "2024-11-15T07:54:19.076079Z",
+          "realProgress": 7754
+        }
+      }
+    }
+  }

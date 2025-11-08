@@ -1,0 +1,31 @@
+{
+    "spec": "cfdp.metadataRecvIndication",
+    "body": {
+      "transactionId": 65537,
+      "sourceEntityId": 1,
+      "fileSize": 2196912,
+      "sourceFileName": "Document.pdf",
+      "destinationFileName": "copy-Document.pdf",
+      "messagesToUser": "",
+      "statusReport": {
+        "spec": "cfdp.cfdpTransactionStatus",
+        "body": {
+          "time": "2024-11-15T08:04:59.709706600Z",
+          "managingEntity": 2,
+          "transactionId": 65537,
+          "sourceEntityId": 1,
+          "destinationEntityId": 2,
+          "isDestination": true,
+          "lastConditionCode": "CC_NOERROR",
+          "lastFaultEntity": "null",
+          "cfdpTransactionState": "RUNNING",
+          "progress": 0,
+          "totalFileSize": 2196912,
+          "transmissionMode": "Class 2",
+          "lastReceivedPduTime": "2024-11-15T08:04:59.707706Z",
+          "lastSentPduTime": "2024-11-15T08:04:59.707706Z",
+          "realProgress": 1817008
+        }
+      }
+    }
+  }

@@ -1,5 +1,9 @@
+import ChannelTest from "@/components/ChannelTest";
+
 export default function Home() {
   return (
-    <div></div>
+    <div>
+      <ChannelTest/>
+    </div>
   );
 }

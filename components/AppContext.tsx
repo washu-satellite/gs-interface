@@ -33,7 +33,7 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
 
         c.on('connected', ctx => {
             console.log("Connected to server");
-        }); 
+        });
 
         c.on('publication', ctx => {
             console.log("Got a publication!");

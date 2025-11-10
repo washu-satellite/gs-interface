@@ -12,6 +12,17 @@ import clsx from "clsx";
 import { Input } from "./ui/input";
 import Image from "next/image";
 import { CheckedState } from "@radix-ui/react-checkbox";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "./ui/form";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { Textarea } from "./ui/textarea";
+import { bStore } from "@/hooks/useAppStore";
+import { EstablishClientSchema, MessageEnvelopeSchema } from "@/gen/messages/transport/v1/transport_pb";
+import { create, toBinary } from "@bufbuild/protobuf";
+import { base64Encode } from "@bufbuild/protobuf/wire";
+import { Subscription } from "centrifuge/build/protobuf";
+import { buildEnvelope } from "@/lib/utils";
 
 const channelGroups = [
     {
@@ -45,6 +56,11 @@ const sampleCommands: {
         id: "Internal::establish_client",
         description: "Send a client establishment packet to the server, just for testing purposes",
         badge: 'sub'
+    },
+    {
+        id: "AIRIS::promote",
+        description: "Promote the mission to a higher operational state",
+        badge: 'promote'
     }
 ];
 
@@ -71,6 +87,68 @@ const ChannelSelection = (props: {
             </div>
         </Label>
     );
+}
+
+const formSchema = z.object({
+  message: z.string().min(2, {
+    message: "Username must be at least 2 characters.",
+  }),
+});
+
+const CommandEditor = () => {
+    const _client = bStore.use.client();
+    const _subscriptions = bStore.use.subscriptions();
+
+    const form = useForm<z.infer<typeof formSchema>>({
+        resolver: zodResolver(formSchema),
+        defaultValues: {
+            message: "",
+        },
+    });
+
+    async function onSubmit(values: z.infer<typeof formSchema>) {
+        console.log(values);
+
+        const packet = create(EstablishClientSchema, {
+            msg: values.message
+        });
+        const bytes = buildEnvelope("0", 'establishClient', packet);
+
+        if (!_client)
+            return;
+        
+        _client.send(bytes).catch(e => {
+            console.log(e);
+        })
+
+        // _subscriptions.get("internal")?.publish(bytes).catch(e => {
+        //     console.log(e);
+        // });
+    }
+
+    return (
+        <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                <FormField
+                    control={form.control}
+                    name="message"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Message</FormLabel>
+                        <FormControl>
+                            <Textarea placeholder="Hello, World!" {...field} />
+                        </FormControl>
+                        <FormDescription>
+                            Message to send to the server
+                        </FormDescription>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                />
+                <Button type="submit" className="bg-blue-600 hover:bg-blue-400 cursor-pointer">Build</Button>
+            </form>
+            </Form>
+    )
 }
 
 const ChannelMenu = (props: {
@@ -170,7 +248,8 @@ const CommandEntry = (props: {
     id: string,
     description?: string,
     badge: CommandBadgeType,
-    filterTerm?: string
+    filterTerm?: string,
+    selectItem?: () => void
 }) => {
     let idElm: ReactNode = props.id;
     let descElm: ReactNode = props.description;
@@ -198,7 +277,11 @@ const CommandEntry = (props: {
     }
 
     return (
-        <div className="bg-blue-100 text-blue-600 hover:bg-blue-200 hover:cursor-pointer p-4 rounded-lg">
+        <div
+            tabIndex={0}
+            className="bg-blue-100 text-blue-600 hover:bg-blue-200 hover:cursor-pointer p-4 rounded-lg tabindex"
+            onClick={props.selectItem}
+        >
             <div className="flex flex-row justify-between items-center">
                 <div className="flex flex-row items-center gap-3">
                     <CommandBadge badge={props.badge}/>
@@ -225,6 +308,8 @@ const CommandEntry = (props: {
 const CommandPrompt = (props: {
     search: string
 }) => {
+    const [expandForm, setExpandForm] = useState(false);
+
     const searchLow = props.search.toLowerCase();
     
     return (
@@ -256,9 +341,18 @@ const CommandPrompt = (props: {
                 <CommandEntry
                     key={i}
                     {...sc}
-                    filterTerm={searchLow}
+                    filterTerm={expandForm ? "" : searchLow}
+                    selectItem={() => setExpandForm(ef => !ef)}
                 />
             ))}
+            {expandForm &&
+                <div className="flex flex-row items-stretch gap-2">
+                    <div className="bg-gray-300 w-0.5 rounded-full mx-2"/>
+                    <div className="flex flex-col w-full gap-2 py-2">
+                        <CommandEditor/>
+                    </div>
+                </div>
+            }
         </div>
     )
 }

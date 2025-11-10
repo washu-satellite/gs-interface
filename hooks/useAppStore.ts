@@ -1,18 +1,29 @@
-import { Centrifuge } from 'centrifuge/build/protobuf';
+import { Centrifuge, Subscription } from 'centrifuge/build/protobuf';
 import { StateCreator, StoreApi, UseBoundStore } from 'zustand';
 import { create } from 'zustand/react';
 
 // Contains all data for managing Centrifuge socket comms
 type SocketStore = {
     client: Centrifuge | null;
+    clientId: string;
+    subscriptions: Map<string, Subscription>;
 
     setClient: (c: Centrifuge) => void;
+    setClientId: (id: string) => void;
+    subscribe: (channel: string, sub: Subscription) => void;
 }
 
 const createSocketStore: StateCreator<SocketStore, [], []> = (set) => ({
     client: null,
+    clientId: "",
+    subscriptions: new Map<string, Subscription>(),
 
-    setClient: (c) => set(() => ({ client: c }))
+    setClient: (c) => set(() => ({ client: c })),
+    setClientId: (id) => set(() => ({ clientId: id })),
+    subscribe: (channel, sub) => set(d => {
+      d.subscriptions.set(channel, sub);
+      return ({ subscriptions: d.subscriptions });
+    })
 })
 
 // Put all the stores together

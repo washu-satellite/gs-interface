@@ -2,7 +2,7 @@
 import { MessageEnvelopeSchema } from '@/gen/messages/transport/v1/transport_pb';
 import { bStore } from '@/hooks/useAppStore';
 import { fromBinary } from '@bufbuild/protobuf';
-import { Centrifuge } from 'centrifuge/build/protobuf';
+import { Centrifuge, Subscription } from 'centrifuge/build/protobuf';
 import React, { useEffect } from 'react';
 
 interface AppContextState {
@@ -20,6 +20,7 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
     const _client = bStore.use.client();
 
     const _setClient = bStore.use.setClient();
+    const _subscribe = bStore.use.subscribe();
 
     const init = async () => {
         const r = await fetch("/api/get-token");
@@ -29,7 +30,7 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
 
         console.log(`Got the token: ${token}`);
 
-        const c = new Centrifuge(`ws://localhost:8000/connection/websocket`);
+        const c = new Centrifuge(`ws://localhost:8000/connection/websocket?format=protobuf`);
 
         c.on('connected', ctx => {
             console.log("Connected to server");
@@ -62,6 +63,11 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
         });
 
         c.connect();
+
+        const sub = new Subscription(c, "internal");
+        sub.subscribe();
+
+        _subscribe("internal", sub);
         
         _setClient(c);
         return c;

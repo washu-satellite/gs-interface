@@ -23,46 +23,8 @@ import { create, toBinary } from "@bufbuild/protobuf";
 import { base64Encode } from "@bufbuild/protobuf/wire";
 import { Subscription } from "centrifuge/build/protobuf";
 import { buildEnvelope } from "@/lib/utils";
-
-const channelGroups = [
-    {
-        title: "AIRIS",
-        icon: <Telescope />,
-        channels: [
-            "Errors",
-            "Warnings",
-            "Telemetry",
-            "Commands"
-        ]
-    },
-    {
-        title: "SCALAR",
-        icon: <Satellite />,
-        channels: [
-            "Errors",
-            "Warnings",
-            "Telemetry",
-            "Commands"
-        ]
-    }
-];
-
-const sampleCommands: {
-    id: string,
-    description: string,
-    badge: CommandBadgeType
-}[] = [
-    {
-        id: "Internal::establish_client",
-        description: "Send a client establishment packet to the server, just for testing purposes",
-        badge: 'sub'
-    },
-    {
-        id: "AIRIS::promote",
-        description: "Promote the mission to a higher operational state",
-        badge: 'promote'
-    }
-];
+import { CommandBadgeType } from "@/types/ui";
+import { channelGroups, commandDetails } from "@/constants/commands";
 
 const ChannelSelection = (props: {
     val: string,
@@ -145,7 +107,10 @@ const CommandEditor = () => {
                         </FormItem>
                     )}
                 />
-                <Button type="submit" className="bg-blue-600 hover:bg-blue-400 cursor-pointer">Build</Button>
+                <div className="flex flex-row gap-2 items-center">
+                    <Button type="submit" className="bg-blue-600 hover:bg-blue-400 cursor-pointer">Build</Button>
+                    <p className="text-muted-foreground text-sm">Assemble a command line directive based on the above parameters</p>
+                </div>
             </form>
             </Form>
     )
@@ -221,8 +186,6 @@ const ChannelMenu = (props: {
     );
 }
 
-type CommandBadgeType = 'promote' | 'sub';
-
 const CommandBadge = (props: {
     badge: CommandBadgeType
 }) => {
@@ -255,22 +218,22 @@ const CommandEntry = (props: {
     let descElm: ReactNode = props.description;
     if (props.filterTerm) {
         if (props.id.toLowerCase().includes(props.filterTerm)) {
-            const temp = props.id.split(props.filterTerm);
+            const index = props.id.toLowerCase().indexOf(props.filterTerm);
             idElm = (
                 <>
-                <span>{temp[0]}</span>
-                <span className="font-extrabold">{props.filterTerm}</span>
-                <span>{temp[1]}</span>
+                <span>{props.id.slice(0, index)}</span>
+                <span className="font-extrabold">{props.id.slice(index, index + props.filterTerm.length)}</span>
+                <span>{props.id.slice(index + props.filterTerm.length)}</span>
                 </>
             );
         }
         if (props.description?.toLowerCase().includes(props.filterTerm)) {
-            const temp = props.description.split(props.filterTerm);
+            const index = props.description.toLowerCase().indexOf(props.filterTerm);
             descElm = (
                 <>
-                <span>{temp[0]}</span>
-                <span className="font-semibold">{props.filterTerm}</span>
-                <span>{temp[1]}</span>
+                <span>{props.description.slice(0, index)}</span>
+                <span className="font-extrabold">{props.description.slice(index, index + props.filterTerm.length)}</span>
+                <span>{props.description.slice(index + props.filterTerm.length)}</span>
                 </>
             );
         }
@@ -314,37 +277,55 @@ const CommandPrompt = (props: {
     
     return (
         <div className="flex flex-col border-t p-4 bg-white absolute bottom-0 left-0 w-full gap-2">
-            {/* <h2 className="font-medium text-gray-700 text-sm">AIRIS Commands</h2>
-            <CommandEntry
-                id="AIRIS::promote"
-                description="Promote the mission to a higher operational state"
-                badge="promote"
-            />
-            <div className="flex flex-row items-stretch gap-2">
-                <div className="bg-blue-100 w-0.5 rounded-full mx-2"/>
-                <div className="flex flex-col w-full gap-2">
-                    <CommandEntry
-                        id="AIRIS::promote::mission"
-                        badge="sub"
-                    />
-                    <CommandEntry
-                        id="AIRIS::promote::standby"
-                        badge="sub"
-                    />
-                </div>
-            </div> */}
-            <h2 className="font-medium text-gray-700 text-sm">Internal Commands</h2>
-            {sampleCommands.filter(c => 
-                c.id.toLowerCase().includes(searchLow) 
-                || c.description.toLowerCase().includes(searchLow)
-            ).map((sc, i) => (
-                <CommandEntry
-                    key={i}
-                    {...sc}
-                    filterTerm={expandForm ? "" : searchLow}
-                    selectItem={() => setExpandForm(ef => !ef)}
-                />
-            ))}
+            {commandDetails.map((cd, k) => {
+                const filteredVals = cd.values.filter(c => 
+                    c.id.toLowerCase().includes(searchLow) 
+                    || c.description.toLowerCase().includes(searchLow)
+                    || (
+                        c.variants.filter(v => 
+                            v.id.toLowerCase().includes(searchLow) || 
+                            v.description.toLowerCase().includes(searchLow)
+                        ).length > 0
+                    )
+                );
+
+                return (
+                    <div key={k}>
+                    {filteredVals.length > 0 &&
+                        <h2 className="font-medium text-gray-700 text-sm">{cd.title}</h2>
+                    }
+                    {filteredVals.map((sc, i) => (
+                        <div key={i} className="flex-col">
+                        <CommandEntry
+                            key={i}
+                            {...sc}
+                            filterTerm={expandForm ? "" : searchLow}
+                            selectItem={() => setExpandForm(ef => !ef)}
+                        />
+                        <div className="flex flex-row items-stretch gap-2 pt-2">
+                            <div className="bg-blue-100 w-0.5 rounded-full mx-2"/>
+                            <div className="flex flex-col w-full gap-2">
+                            {sc.variants.filter(c => 
+                                c.id.toLowerCase().includes(searchLow) 
+                                || c.description.toLowerCase().includes(searchLow)
+                            ).map((v, j) => (
+                                <CommandEntry
+                                    key={j}
+                                    id={sc.id + "::" + v.id}
+                                    badge="sub"
+                                    filterTerm={expandForm ? "" : searchLow}
+                                    selectItem={() => setExpandForm(ef => !ef)}
+                                    description={v.description}
+                                />
+                            ))}
+                            </div>
+                        </div>
+                        </div>
+                    ))}
+                    </div>
+                )
+            })}
+            
             {expandForm &&
                 <div className="flex flex-row items-stretch gap-2">
                     <div className="bg-gray-300 w-0.5 rounded-full mx-2"/>
@@ -395,12 +376,12 @@ export default function ChannelTest() {
     return (
         <ResizablePanelGroup direction="horizontal" className="h-screen">
             <ResizablePanel defaultSize={30} minSize={20}>
-                <div className=" px-2 h-screen">
-                    <div className="flex flex-row items-center p-2 pb-4 gap-4">
+                <div className="h-screen">
+                    <div className="flex flex-row items-center p-2 mb-2 gap-4 border-blue-600 border-l-4">
                         {/* <Image src={"/icon.svg"} alt="WashU Satellite" width={30} height={30}/> */}
-                        <h1 className="font-medium text-lg">Mission Dashboard</h1>
+                        <h1 className="font-medium text-base px-2">Mission Dashboard</h1>
                     </div>
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-2 px-2">
                         {channelGroups.map((cg, i) => (
                             <ChannelMenu
                                 key={i}

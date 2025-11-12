@@ -2,15 +2,14 @@
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "./ui/resizable";
 import { Collapsible, CollapsibleTrigger } from "./ui/collapsible";
 import { Button } from "./ui/button";
-import { ChevronDown, ChevronRight, ChevronUp, EllipsisVertical, Hash, Satellite, Telescope } from "lucide-react";
+import { ChevronUp, EllipsisVertical, Hash } from "lucide-react";
 import { CollapsibleContent } from "./ui/collapsible";
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
-import React, { Dispatch, ReactNode, SetStateAction, useState } from "react";
+import React, { ReactNode, useEffect, useState } from "react";
 import { Badge } from "./ui/badge";
 import clsx from "clsx";
 import { Input } from "./ui/input";
-import Image from "next/image";
 import { CheckedState } from "@radix-ui/react-checkbox";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "./ui/form";
 import { z } from "zod";
@@ -18,13 +17,12 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Textarea } from "./ui/textarea";
 import { bStore } from "@/hooks/useAppStore";
-import { EstablishClientSchema, MessageEnvelopeSchema } from "@/gen/messages/transport/v1/transport_pb";
-import { create, toBinary } from "@bufbuild/protobuf";
-import { base64Encode } from "@bufbuild/protobuf/wire";
-import { Subscription } from "centrifuge/build/protobuf";
+import { EstablishClientSchema, MessageEnvelope } from "@/gen/messages/transport/v1/transport_pb";
+import { create } from "@bufbuild/protobuf";
 import { buildEnvelope } from "@/lib/utils";
 import { CommandBadgeType } from "@/types/ui";
-import { channelGroups, commandDetails } from "@/constants/commands";
+import { allCommands, channelGroups, CmdFormInternalMessage, cmdInternalMessage, CommandDetails, commandDetails, CommandFormProps } from "@/constants/commands";
+import { LogTable } from "./LogTable";
 
 const ChannelSelection = (props: {
     val: string,
@@ -51,69 +49,99 @@ const ChannelSelection = (props: {
     );
 }
 
-const formSchema = z.object({
-  message: z.string().min(2, {
-    message: "Username must be at least 2 characters.",
-  }),
-});
+// const formSchema = z.object({
+//   message: z.string().min(2, {
+//     message: "Username must be at least 2 characters.",
+//   }),
+// });
 
-const CommandEditor = () => {
-    const _client = bStore.use.client();
-    const _subscriptions = bStore.use.subscriptions();
+// function parseZod(zodObj: z.ZodObject, data: unknown) {
+//     try {
+//         zodObj.parse(data);
+//     } catch (error) {
+//         if (error instanceof z.ZodError) {
+//             return error;
+//         } else {
+//             return {
+//                 unknownError: error
+//             };
+//         }
+//     }
+//     return null;
+// }
 
-    const form = useForm<z.infer<typeof formSchema>>({
-        resolver: zodResolver(formSchema),
-        defaultValues: {
-            message: "",
-        },
-    });
+// function CommandEditor<T extends z.ZodObject>(props: {
+//     commandDetails: CommandDetails<T>
+// }) {
+//     const _client = bStore.use.client();
+//     const _subscriptions = bStore.use.subscriptions();
 
-    async function onSubmit(values: z.infer<typeof formSchema>) {
-        console.log(values);
+    
 
-        const packet = create(EstablishClientSchema, {
-            msg: values.message
-        });
-        const bytes = buildEnvelope("0", 'establishClient', packet);
+//     async function onSubmit(values: any) {
+//         if (!props.commandDetails)
+//             return;
 
-        if (!_client)
-            return;
+//         const message = props.commandDetails.zodToMessage(values);
+
+//         const bytes = buildEnvelope("0", props.commandDetails.messageEnvelopeId, message);
+
+//         if (!_client)
+//             return;
         
-        _client.send(bytes).catch(e => {
-            console.log(e);
-        })
+//         _client.send(bytes).catch(e => {
+//             console.log(e);
+//         })
 
-        // _subscriptions.get("internal")?.publish(bytes).catch(e => {
-        //     console.log(e);
-        // });
-    }
+//         // _subscriptions.get("internal")?.publish(bytes).catch(e => {
+//         //     console.log(e);
+//         // });
+//     }
 
+//     const shape = props.commandDetails.zodObj.shape;
+
+//     return (
+//         <Form {...form}>
+//             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+//                     <FormField
+//                         control={form.control}
+//                         name={k}
+//                         render={({ field }) => (
+//                             <FormItem>
+//                             <FormLabel>Message</FormLabel>
+//                             <FormControl>
+//                                 <Textarea placeholder="Hello, World!" {...field} />
+//                             </FormControl>
+//                             <FormDescription>
+//                                 Message to send to the server
+//                             </FormDescription>
+//                             <FormMessage />
+//                             </FormItem>
+//                         )}
+//                     />
+//                 <div className="flex flex-row gap-2 items-center">
+//                     <Button type="submit" className="bg-blue-600 hover:bg-blue-400 cursor-pointer">Build</Button>
+//                     <p className="text-muted-foreground text-sm">Assemble a command line directive based on the above parameters</p>
+//                 </div>
+//             </form>
+//             </Form>
+//     )
+// }
+
+export const ChannelBadge = (props: {
+    value: string
+}) => {
     return (
-        <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-                <FormField
-                    control={form.control}
-                    name="message"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Message</FormLabel>
-                        <FormControl>
-                            <Textarea placeholder="Hello, World!" {...field} />
-                        </FormControl>
-                        <FormDescription>
-                            Message to send to the server
-                        </FormDescription>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                />
-                <div className="flex flex-row gap-2 items-center">
-                    <Button type="submit" className="bg-blue-600 hover:bg-blue-400 cursor-pointer">Build</Button>
-                    <p className="text-muted-foreground text-sm">Assemble a command line directive based on the above parameters</p>
-                </div>
-            </form>
-            </Form>
-    )
+        <Badge className={clsx(
+            props.value.toLowerCase().includes("error") 
+                ? "bg-red-100 border-red-500 text-red-600"
+                : props.value.toLowerCase().includes("warning")
+                    ? "bg-amber-100 border-amber-500 text-amber-600"
+                    : "bg-blue-100 border-blue-500 text-black"
+        )}>
+            {props.value.toLowerCase()}
+        </Badge>
+    );
 }
 
 const ChannelMenu = (props: {
@@ -130,6 +158,9 @@ const ChannelMenu = (props: {
         isChecked: false
     })));
 
+    const _addChannel = bStore.use.addChannel();
+    const _removeChannel = bStore.use.removeChannel();
+
     return (
         <Collapsible
             open={isOpen}
@@ -140,22 +171,14 @@ const ChannelMenu = (props: {
             )}
         >
             <CollapsibleTrigger asChild>
-                <div className="flex flex-row justify-between items-center px-2 w-full group relative">
+                <div className="cursor-pointer flex flex-row justify-between items-center px-2 w-full group relative">
                     <div className="flex flex-row gap-2 overflow-hidden text-gray-700 p-2">
                         <div className="flex-1">
                             {props.icon}
                         </div>
                         <p className="flex-1 shrink-0 whitespace-nowrap font-medium text-sm pt-px">{props.title} Channels</p>
                         {values.filter(v => v.isChecked).map((v, i) => (
-                            <Badge key={i} className={clsx(
-                                v.value.toLowerCase().includes("error") 
-                                    ? "bg-red-100 border-red-500 text-red-600"
-                                    : v.value.toLowerCase().includes("warning")
-                                        ? "bg-amber-100 border-amber-500 text-amber-600"
-                                        : "bg-blue-100 border-blue-500 text-black"
-                            )}>
-                                {v.value.toLowerCase()}
-                            </Badge>
+                            <ChannelBadge key={i} value={v.value}/>
                         ))}
                     </div>
                     <Button variant="ghost" size="icon">
@@ -168,13 +191,24 @@ const ChannelMenu = (props: {
                     </Button>
                 </div>  
             </CollapsibleTrigger>
-            <CollapsibleContent>
+            <CollapsibleContent
+                className="overflow-hidden 
+                        transition-all duration-100
+                        data-[state=closed]:animate-collapsible-up
+                        data-[state=open]:animate-collapsible-down"
+            >
                 {values.map((v, i) => (
                     <ChannelSelection
                         key={i}
                         val={v.value}
                         checked={v.isChecked}
                         onCheckedChange={(checked) => {
+                            if (checked.valueOf()) {
+                                _addChannel(v.value);
+                            } else {
+                                _removeChannel(v.value);
+                            }
+
                             setValues(v => v.map((v1, j) => (
                                 i == j ? ({ value: v1.value, isChecked: checked.valueOf() !== false }) : v1
                             )))
@@ -222,7 +256,7 @@ const CommandEntry = (props: {
             idElm = (
                 <>
                 <span>{props.id.slice(0, index)}</span>
-                <span className="font-extrabold">{props.id.slice(index, index + props.filterTerm.length)}</span>
+                <span className="font-bold">{props.id.slice(index, index + props.filterTerm.length)}</span>
                 <span>{props.id.slice(index + props.filterTerm.length)}</span>
                 </>
             );
@@ -232,7 +266,7 @@ const CommandEntry = (props: {
             descElm = (
                 <>
                 <span>{props.description.slice(0, index)}</span>
-                <span className="font-extrabold">{props.description.slice(index, index + props.filterTerm.length)}</span>
+                <span className="font-semibold">{props.description.slice(index, index + props.filterTerm.length)}</span>
                 <span>{props.description.slice(index + props.filterTerm.length)}</span>
                 </>
             );
@@ -268,12 +302,39 @@ const CommandEntry = (props: {
 //     )
 // }
 
+function CommandForm(props: {
+    messageId: MessageEnvelope["messageBody"]["case"]
+    onSubmit: (values: any, cd: CommandDetails<z.ZodObject>) => void
+}) {
+    switch (props.messageId) {
+    case 'internalMessage':
+        return (
+            <CmdFormInternalMessage onSubmit={(values) => props.onSubmit(values, cmdInternalMessage)} />
+        );
+    }
+}
+
 const CommandPrompt = (props: {
     search: string
 }) => {
-    const [expandForm, setExpandForm] = useState(false);
+    const _client = bStore.use.client();
+
+    const [formMessage, setFormMessage] = useState<MessageEnvelope["messageBody"]["case"] | null>(null);
 
     const searchLow = props.search.toLowerCase();
+
+    const onSubmitCommandForm = (values: any, cd: CommandDetails<z.ZodObject>) => {
+        const message = cd.zodToMessage(values);
+
+        const bytes = buildEnvelope("0", cd.messageEnvelopeId, message);
+
+        if (!_client)
+            return;
+        
+        _client.send(bytes).catch(e => {
+            console.log(e);
+        });
+    }
     
     return (
         <div className="flex flex-col border-t p-4 bg-white absolute bottom-0 left-0 w-full gap-2">
@@ -299,8 +360,8 @@ const CommandPrompt = (props: {
                         <CommandEntry
                             key={i}
                             {...sc}
-                            filterTerm={expandForm ? "" : searchLow}
-                            selectItem={() => setExpandForm(ef => !ef)}
+                            filterTerm={formMessage ? "" : searchLow}
+                            selectItem={() => setFormMessage(fm => fm == sc.messageEnvelopeId ? null : sc.messageEnvelopeId)}
                         />
                         <div className="flex flex-row items-stretch gap-2 pt-2">
                             <div className="bg-blue-100 w-0.5 rounded-full mx-2"/>
@@ -313,8 +374,8 @@ const CommandPrompt = (props: {
                                     key={j}
                                     id={sc.id + "::" + v.id}
                                     badge="sub"
-                                    filterTerm={expandForm ? "" : searchLow}
-                                    selectItem={() => setExpandForm(ef => !ef)}
+                                    filterTerm={formMessage ? "" : searchLow}
+                                    selectItem={() => setFormMessage(fm => fm == sc.messageEnvelopeId ? null : sc.messageEnvelopeId)}
                                     description={v.description}
                                 />
                             ))}
@@ -326,11 +387,14 @@ const CommandPrompt = (props: {
                 )
             })}
             
-            {expandForm &&
+            {formMessage &&
                 <div className="flex flex-row items-stretch gap-2">
                     <div className="bg-gray-300 w-0.5 rounded-full mx-2"/>
                     <div className="flex flex-col w-full gap-2 py-2">
-                        <CommandEditor/>
+                        {/* <CommandEditor
+                            commandId={formMessage}
+                        /> */}
+                        <CommandForm messageId={formMessage} onSubmit={onSubmitCommandForm}/>
                     </div>
                 </div>
             }
@@ -344,6 +408,7 @@ const ConsoleView = () => {
 
     return (
         <>
+            <LogTable/>
             <div className="flex-1 bg-gray-50 rounded-md mx-2 p-4 rounded-b-none border border-b-0 relative">
                 {expandSearch &&
                     <CommandPrompt
@@ -377,7 +442,7 @@ export default function ChannelTest() {
         <ResizablePanelGroup direction="horizontal" className="h-screen">
             <ResizablePanel defaultSize={30} minSize={20}>
                 <div className="h-screen">
-                    <div className="flex flex-row items-center p-2 mb-2 gap-4 border-blue-600 border-l-4">
+                    <div className="flex flex-row items-center p-2 mb-2 gap-4 border-rose-800 border-l-4">
                         {/* <Image src={"/icon.svg"} alt="WashU Satellite" width={30} height={30}/> */}
                         <h1 className="font-medium text-base px-2">Mission Dashboard</h1>
                     </div>

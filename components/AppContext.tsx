@@ -19,8 +19,12 @@ const AppContext = React.createContext<AppContextProps>(DefaultAppContext);
 const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
     const _client = bStore.use.client();
 
+    const _openChannels = bStore.use.openChannels();
+
     const _setClient = bStore.use.setClient();
     const _subscribe = bStore.use.subscribe();
+    
+    const _addMessage = bStore.use.addMessage();
 
     const init = async () => {
         const r = await fetch("/api/get-token");
@@ -50,13 +54,19 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
 
             console.log(`Got envelope with src: ${envelope.senderId} and dest: ${envelope.destId}`);
 
+            if (!_openChannels.includes("telemetry"))
+                return;
+
             switch (envelope.messageBody.case) {
-                case 'airisBeacon':
-                    console.log(`Got an AIRIS beacon. Battery current: ${envelope.messageBody.value.batCurrent}`);
+                case 'internalMessage':
+                    _addMessage(envelope);
                     break;
-                case 'establishClient':
-                    console.log("Got an establish client message");
-                    break;
+                // case 'airisBeacon':
+                //     console.log(`Got an AIRIS beacon. Battery current: ${envelope.messageBody.value.batCurrent}`);
+                //     break;
+                // case 'establishClient':
+                //     console.log("Got an establish client message");
+                //     break;
                 default:
                     console.error(`No handler established for message type "${envelope.messageBody.case}" yet`);
             }

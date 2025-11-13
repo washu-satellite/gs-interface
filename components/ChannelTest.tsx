@@ -203,11 +203,15 @@ const ChannelMenu = (props: {
                         val={v.value}
                         checked={v.isChecked}
                         onCheckedChange={(checked) => {
+                            const val = v.value.toLowerCase();
+
                             if (checked.valueOf()) {
-                                _addChannel(v.value);
+                                _addChannel(val);
                             } else {
-                                _removeChannel(v.value);
+                                _removeChannel(val);
                             }
+
+                            console.log(bStore.getState().openChannels);
 
                             setValues(v => v.map((v1, j) => (
                                 i == j ? ({ value: v1.value, isChecked: checked.valueOf() !== false }) : v1
@@ -409,14 +413,14 @@ const ConsoleView = () => {
     return (
         <>
             <LogTable/>
-            <div className="flex-1 bg-gray-50 rounded-md mx-2 p-4 rounded-b-none border border-b-0 relative">
+            <div className="flex-1 bg-gray-50 rounded-md p-2 rounded-b-none border border-b-0 relative">
                 {expandSearch &&
                     <CommandPrompt
                         search={search}
                     />
                 }
             </div>
-            <div className="flex flex-row px-2">
+            <div className="flex flex-row">
                 <Input
                     className="flex-1 rounded-r-none rounded-tl-none border-r-0 z-10"
                     onChange={(e) => {

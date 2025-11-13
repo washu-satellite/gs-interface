@@ -19,8 +19,6 @@ const AppContext = React.createContext<AppContextProps>(DefaultAppContext);
 const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
     const _client = bStore.use.client();
 
-    const _openChannels = bStore.use.openChannels();
-
     const _setClient = bStore.use.setClient();
     const _subscribe = bStore.use.subscribe();
     
@@ -54,7 +52,9 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
 
             console.log(`Got envelope with src: ${envelope.senderId} and dest: ${envelope.destId}`);
 
-            if (!_openChannels.includes("telemetry"))
+            const channels = bStore.getState().openChannels;
+
+            if (!channels.includes("telemetry"))
                 return;
 
             switch (envelope.messageBody.case) {

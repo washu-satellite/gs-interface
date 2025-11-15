@@ -139,10 +139,10 @@ export const ChannelBadge = (props: {
     return (
         <Badge className={clsx(
             props.value.toLowerCase().includes("error") 
-                ? "bg-red-100 border-red-500 text-red-600 dark:bg-red-500 dark:text-white"
+                ? "bg-red-100 border-red-500 text-red-600 dark:bg-red-900 dark:border-red-700 dark:text-white"
                 : props.value.toLowerCase().includes("warning")
-                    ? "bg-amber-100 border-amber-500 text-amber-600 dark:bg-amber-500 dark:text-white"
-                    : "bg-blue-100 border-blue-500 text-black dark:bg-blue-500 dark:text-white"
+                    ? "bg-amber-100 border-amber-500 text-amber-600 dark:bg-amber-900 dark:border-amber-700 dark:text-white"
+                    : "bg-blue-100 border-blue-500 text-black dark:bg-blue-900 dark:border-blue-600 dark:text-foreground"
         )}>
             {props.value.toLowerCase()}
         </Badge>
@@ -467,7 +467,7 @@ export default function ChannelTest() {
                 <div className="h-screen flex flex-col">
                     <div className="flex flex-row items-center p-3 px-4 gap-2 border-b group">
                         {/* <Image src={"/icon.svg"} alt="WashU Satellite" width={30} height={30}/> */}
-                        <h1 className="font-medium cursor-pointer">Mission Dashboard</h1>
+                        <h1 className="font-bold cursor-pointer">Mission Dashboard</h1>
                         <ChevronDown className="w-4 hidden group-hover:block"/>
                     </div>
                     <div className="flex-1 overflow-scroll p-2">
@@ -504,15 +504,15 @@ export default function ChannelTest() {
                                         @{_user?.username}
                                     </TooltipContent>
                                 </Tooltip>
-                                <p className="text-xs">Software Engineering</p>
-                                {true ? (
+                                <p className="text-xs text-muted-foreground">Software Engineering</p>
+                                {false ? (
                                     <div className="flex flex-row items-center gap-1 hover:underline text-red-500">
                                         <TriangleAlert className="w-3"/>
                                         <a href="" className="font-mono text-[0.7rem] pt-[0.05rem] font-medium">UNLICENSED</a>
                                     </div>
                                 ) : (
-                                    <div className="flex flex-row items-center gap-1 hover:underline">
-                                        <a href="" className="font-mono text-[0.7rem] text-secondary-foreground">KF0TSQ</a>
+                                    <div className="flex flex-row items-center gap-1 hover:underline text-muted-foreground">
+                                        <a href="" className="font-mono text-[0.7rem]">KF0TSQ</a>
                                         <Check className="w-3"/>
                                     </div>
                                 )}

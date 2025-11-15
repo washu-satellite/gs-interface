@@ -91,7 +91,7 @@ export const columns: ColumnDef<MessageDetails>[] = [
         header: "Id",
         cell: ({ row }) => (
             <Badge
-                className="font-mono rounded-md hover:underline underline-offset-2 cursor-pointer"
+                className="font-mono rounded-md hover:underline underline-offset-2 cursor-pointer bg-secondary text-muted-foreground"
             >
                 {row.getValue("id")}
             </Badge>
@@ -176,7 +176,7 @@ function MessageContent(props: {
         const d = props.data as Message;
 
         return (
-            <div className="text-wrap ml-1.5 pl-4 border-gray-200 border-l-2 py-2">
+            <div className="text-wrap ml-1.5 pl-4 border-l-2 py-2">
                 <h4 className="font-semibold">{d.heading}</h4>
                 <p>{d.message}</p>
             </div>
@@ -194,7 +194,7 @@ const LogRow = (props: {
             <TableRow
                 key={props.row.id}
                 data-state={props.row.getIsSelected() && "selected"}
-                className="hover:bg-gray-200/60"
+                className="text-secondary-foreground"
             >
                 {props.row.getVisibleCells().map((cell) => (
                     <TableCell
@@ -211,7 +211,7 @@ const LogRow = (props: {
                 asChild
             >
                 <TableRow>
-                    <TableCell colSpan={5}>
+                    <TableCell colSpan={6}>
                         <MessageContent
                             id={props.row.getValue("id")}
                             data={props.row.getValue("data")}

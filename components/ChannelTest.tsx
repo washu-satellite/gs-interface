@@ -139,10 +139,10 @@ export const ChannelBadge = (props: {
     return (
         <Badge className={clsx(
             props.value.toLowerCase().includes("error") 
-                ? "bg-red-100 border-red-500 text-red-600"
+                ? "bg-red-100 border-red-500 text-red-600 dark:bg-red-500 dark:text-white"
                 : props.value.toLowerCase().includes("warning")
-                    ? "bg-amber-100 border-amber-500 text-amber-600"
-                    : "bg-blue-100 border-blue-500 text-black"
+                    ? "bg-amber-100 border-amber-500 text-amber-600 dark:bg-amber-500 dark:text-white"
+                    : "bg-blue-100 border-blue-500 text-black dark:bg-blue-500 dark:text-white"
         )}>
             {props.value.toLowerCase()}
         </Badge>
@@ -173,14 +173,14 @@ const ChannelMenu = (props: {
             open={isOpen}
             onOpenChange={setIsOpen}
             className={clsx(
-                isOpen ? "bg-gray-50" : "hover:bg-gray-100",
+                isOpen ? "bg-secondary/40" : "hover:bg-secondary",
                 "rounded-lg"
             )}
         >
             <CollapsibleTrigger asChild>
                 <div className="">
                 <div className="cursor-pointer flex flex-row justify-between items-center w-full group relative">
-                    <div className="flex flex-row gap-2 overflow-hidden text-gray-700 p-2">
+                    <div className="flex flex-row gap-2 overflow-hidden text-muted-foreground p-2">
                         <div className="flex-1">
                             {props.icon}
                         </div>
@@ -243,13 +243,13 @@ const CommandBadge = (props: {
     switch (props.badge) {
         case 'promote':
             return (
-                <div className="border border-blue-500 bg-blue-200 p-0.5 px-1 rounded-md">
+                <div className="border border-blue-500 bg-blue-200 dark:bg-blue-500 p-0.5 px-1 rounded-md">
                     <ChevronUp className="w-5"/>
                 </div>
             );
         case 'sub':
             return (
-                <div className="border border-blue-500 bg-blue-200 p-0.5 px-1.5 rounded-md">
+                <div className="border border-blue-500 bg-blue-200 dark:bg-blue-500 p-0.5 px-1.5 rounded-md">
                     <Hash className="w-4"/>
                 </div>
             );
@@ -293,7 +293,7 @@ const CommandEntry = (props: {
     return (
         <div
             tabIndex={0}
-            className="bg-blue-100 text-blue-600 hover:bg-blue-200 hover:cursor-pointer p-4 rounded-lg tabindex"
+            className="bg-blue-100 text-blue-600 hover:bg-blue-200 dark:bg-blue-950 dark:hover:bg-blue-900 dark:text-blue-100 hover:cursor-pointer p-4 rounded-lg tabindex"
             onClick={props.selectItem}
         >
             <div className="flex flex-row justify-between items-center">
@@ -302,7 +302,7 @@ const CommandEntry = (props: {
                     <div>
                         <h3 className="font-mono">{idElm}</h3>
                         {props.description &&
-                            <p className="text-gray-600 text-sm">{descElm}</p>
+                            <p className="text-muted-foreground text-sm">{descElm}</p>
                         }
                     </div>
                 </div>
@@ -354,7 +354,7 @@ const CommandPrompt = (props: {
     }
     
     return (
-        <div className="flex flex-col border-t p-4 bg-white absolute bottom-0 left-0 w-full gap-2">
+        <div className="flex flex-col border-t p-4 bg-background absolute bottom-0 left-0 w-full gap-2">
             {commandDetails.map((cd, k) => {
                 const filteredVals = cd.values.filter(c => 
                     c.id.toLowerCase().includes(searchLow) 
@@ -370,7 +370,7 @@ const CommandPrompt = (props: {
                 return (
                     <div key={k}>
                     {filteredVals.length > 0 &&
-                        <h2 className="font-medium text-gray-700 text-sm">{cd.title}</h2>
+                        <h2 className="font-medium text-muted-foreground text-sm pb-2">{cd.title}</h2>
                     }
                     {filteredVals.map((sc, i) => (
                         <div key={i} className="flex-col">
@@ -407,7 +407,7 @@ const CommandPrompt = (props: {
             
             {formMessage &&
                 <div className="flex flex-row items-stretch gap-2">
-                    <div className="bg-gray-300 w-0.5 rounded-full mx-2"/>
+                    <div className="bg-secondary w-0.5 rounded-full mx-2"/>
                     <div className="flex flex-col w-full gap-2 py-2">
                         {/* <CommandEditor
                             commandId={formMessage}
@@ -427,7 +427,7 @@ const ConsoleView = () => {
     return (
         <>
             <LogTable/>
-            <div className="flex-1 bg-gray-50 rounded-md p-2 rounded-b-none border border-b-0 relative">
+            <div className="flex-1 bg-secondary/30 rounded-md p-2 rounded-b-none border border-b-0 relative">
                 {expandSearch &&
                     <CommandPrompt
                         search={search}

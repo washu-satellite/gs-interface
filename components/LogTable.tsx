@@ -255,7 +255,7 @@ export function LogTable() {
 
     return (
         <div className="w-full">
-            <div className="flex items-center py-4">
+            <div className="flex items-center pb-4">
                 <Input
                     placeholder="Filter by..."
                     value={(table.getColumn("id")?.getFilterValue() as string) ?? ""}
@@ -292,12 +292,11 @@ export function LogTable() {
                 </DropdownMenu>
             </div>
             <div className="overflow-hidden rounded-md border">
-                <Table className="bg-gray-50">
+                <Table className="bg-secondary/30">
                     <TableHeader>
                         {table.getHeaderGroups().map((headerGroup) => (
                             <TableRow
                                 key={headerGroup.id}
-                                className="hover:bg-gray-200/60"
                             >
                                 {headerGroup.headers.map((header) => {
                                     return (
@@ -328,7 +327,6 @@ export function LogTable() {
                             ))
                         ) : (
                             <TableRow
-                                className="hover:bg-gray-200/60"
                             >
                                 <TableCell
                                     colSpan={columns.length}

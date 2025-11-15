@@ -4,6 +4,7 @@ import { Centrifuge, Subscription } from 'centrifuge/build/protobuf';
 import { channel } from 'diagnostics_channel';
 import { StateCreator, StoreApi, UseBoundStore } from 'zustand';
 import { create } from 'zustand/react';
+import { createAuthClient } from 'better-auth/react';
 
 export type MessageDetails = {
   timestamp: Date,
@@ -60,11 +61,31 @@ const createSocketStore: StateCreator<SocketStore, [], []> = (set) => ({
     }),
     addChannel: (channel) => set((state) => ({ openChannels: [...state.openChannels, channel] })),
     removeChannel: (channel) => set((state) => ({ openChannels: state.openChannels.filter(c => c !== channel) }))
-})
+});
+
+type UserData = {
+  email: string,
+  username: string,
+  avatar: string
+}
+
+// Contains all data for managing Centrifuge socket comms
+type UserStore = {
+  user: UserData | null;
+
+  setUser: (user: UserData) => void;
+}
+
+const createUserStore: StateCreator<UserStore, [], []> = (set) => ({
+  user: null,
+
+  setUser: (user) => set(() => ({ user }))
+});
 
 // Put all the stores together
-export const useBoundedStore = create<SocketStore>()((...a) => ({
+export const useBoundedStore = create<SocketStore & UserStore>()((...a) => ({
     ...createSocketStore(...a),
+    ...createUserStore(...a)
 }));
 
 // Helpful Typescript selectors for Zustand

@@ -1,8 +1,10 @@
 "use client";
 import { MessageEnvelopeSchema } from '@/gen/messages/transport/v1/transport_pb';
 import { bStore } from '@/hooks/useAppStore';
+import { authClient } from '@/lib/auth-client';
 import { fromBinary } from '@bufbuild/protobuf';
 import { Centrifuge, Subscription } from 'centrifuge/build/protobuf';
+import { redirect } from 'next/navigation';
 import React, { useEffect } from 'react';
 
 interface AppContextState {
@@ -17,14 +19,28 @@ const DefaultAppContext: AppContextProps = {
 const AppContext = React.createContext<AppContextProps>(DefaultAppContext);
 
 const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
+    const session = authClient.useSession();
+
     const _client = bStore.use.client();
 
     const _setClient = bStore.use.setClient();
     const _subscribe = bStore.use.subscribe();
+    const _setUser = bStore.use.setUser();
     
     const _addMessage = bStore.use.addMessage();
 
+    // establish user information, connect to the Centrifuge server, generate handlers
     const init = async () => {
+        if (session.data) {
+            const baUser = session.data.user;
+
+            _setUser({
+                username: baUser.name,
+                email: baUser.email,
+                avatar: "https://www.washusatellite.com/headshots/nate.jpg"
+            });
+        }
+
         const r = await fetch("/api/get-token");
         if (!r.ok) { console.error("Failed to retrieve JWT for socket"); return; }
 
@@ -52,24 +68,14 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
 
             console.log(`Got envelope with src: ${envelope.senderId} and dest: ${envelope.destId}`);
 
+            // note: always use bStore.getState() in handlers
             const channels = bStore.getState().openChannels;
 
+            // TODO: add channels to bStore
             if (!channels.includes("telemetry"))
                 return;
 
-            switch (envelope.messageBody.case) {
-                case 'internalMessage':
-                    _addMessage(envelope);
-                    break;
-                // case 'airisBeacon':
-                //     console.log(`Got an AIRIS beacon. Battery current: ${envelope.messageBody.value.batCurrent}`);
-                //     break;
-                // case 'establishClient':
-                //     console.log("Got an establish client message");
-                //     break;
-                default:
-                    console.error(`No handler established for message type "${envelope.messageBody.case}" yet`);
-            }
+            _addMessage(envelope);
         });
 
         c.connect();
@@ -83,10 +89,16 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
         return c;
     }
 
-    // App initialization
+    // app initialization
     useEffect(() => {
+        // if the user's session has not been established,
+        // delay connecting to the Centrifuge server and populating user information
+        if (!session || session.isPending) {
+            return;
+        }
+
         init();
-    }, []);
+    }, [session]);
 
     return (
         <AppContext.Provider

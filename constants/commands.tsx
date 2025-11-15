@@ -1,5 +1,4 @@
 import React, { ReactNode } from "react";
-import { airisCommands } from "./airis";
 import { Satellite, Telescope } from "lucide-react";
 import { CommandBadgeType } from "@/types/ui";
 import { title } from "process";
@@ -16,9 +15,15 @@ import { buildEnvelope } from "@/lib/utils";
 import { bStore } from "@/hooks/useAppStore";
 import { Input } from "@/components/ui/input";
 
-export const channelGroups = [
+type Group = 'AIRIS' | 'GS-2' | 'SCALAR' | 'Internal';
+
+export const channelGroups: {
+    group: Group,
+    icon: ReactNode,
+    channels: string[]
+}[] = [
     {
-        title: "AIRIS",
+        group: 'AIRIS',
         icon: <Telescope />,
         channels: [
             "Errors",
@@ -28,7 +33,7 @@ export const channelGroups = [
         ]
     },
     {
-        title: "SCALAR",
+        group: 'SCALAR',
         icon: <Satellite />,
         channels: [
             "Errors",
@@ -39,16 +44,14 @@ export const channelGroups = [
     }
 ];
 
-type ZodFields = Readonly<{ [k: string]: $ZodType<unknown, unknown, $ZodTypeInternals<unknown, unknown>>; }>;
-
 export type CommandDetails<T extends z.ZodObject> = {
-    pbSchema: any,
+    group: Group,
     id: string,
     description: string,
     badge: CommandBadgeType,
 
+    // Form validators
     zodObj: T,
-    form?: React.FC<CommandFormProps>,
     zodToMessage: (data: z.infer<T>) => MessageEnvelope["messageBody"]["value"],
 
     messageEnvelopeId: MessageEnvelope["messageBody"]["case"],
@@ -78,6 +81,27 @@ const cmdFmtInternalMessage = z.object({
     message: z.string(),
     heading: z.string()
 });
+
+export const cmdInternalMessage: CommandDetails<typeof cmdFmtInternalMessage> = {
+    group: 'Internal',
+    id: "message",
+    description: "Dummy message to practice with server",
+    badge: 'sub',
+
+    zodObj: cmdFmtInternalMessage,
+    zodToMessage: (data) => {
+        console.log(`Got data: ${data.heading}, ${data.message}`);
+
+        return create(MessageSchema, {
+            heading: data.heading,
+            message: data.message
+        });
+    },
+
+    messageEnvelopeId: 'internalMessage',
+
+    variants: []
+};
 
 export function CmdFormInternalMessage(props: CommandFormProps) {
     const form = useForm<z.infer<typeof cmdFmtInternalMessage>>({
@@ -134,27 +158,6 @@ export function CmdFormInternalMessage(props: CommandFormProps) {
         </FormProvider>
     );
 }
-
-export const cmdInternalMessage: CommandDetails<typeof cmdFmtInternalMessage> = {
-    pbSchema: null,
-    id: "Internal::message",
-    description: "Dummy message to practice with server",
-    badge: 'sub',
-
-    zodObj: cmdFmtInternalMessage,
-    zodToMessage: (data) => {
-        console.log(`Got data: ${data.heading}, ${data.message}`);
-
-        return create(MessageSchema, {
-            heading: data.heading,
-            message: data.message
-        });
-    },
-
-    messageEnvelopeId: 'internalMessage',
-
-    variants: []
-};
 
 
 const internalCommands = [

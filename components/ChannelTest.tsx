@@ -2,7 +2,7 @@
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "./ui/resizable";
 import { Collapsible, CollapsibleTrigger } from "./ui/collapsible";
 import { Button } from "./ui/button";
-import { ChevronUp, EllipsisVertical, Hash } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, CircleQuestionMark, EllipsisVertical, Hash, TriangleAlert } from "lucide-react";
 import { CollapsibleContent } from "./ui/collapsible";
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
@@ -23,6 +23,11 @@ import { buildEnvelope } from "@/lib/utils";
 import { CommandBadgeType } from "@/types/ui";
 import { allCommands, channelGroups, CmdFormInternalMessage, cmdInternalMessage, CommandDetails, commandDetails, CommandFormProps } from "@/constants/commands";
 import { LogTable } from "./LogTable";
+import { Avatar, AvatarImage } from "./ui/avatar";
+import { AvatarFallback } from "@radix-ui/react-avatar";
+import { authClient } from "@/lib/auth-client";
+import { redirect } from "next/navigation";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 const ChannelSelection = (props: {
     val: string,
@@ -161,6 +166,8 @@ const ChannelMenu = (props: {
     const _addChannel = bStore.use.addChannel();
     const _removeChannel = bStore.use.removeChannel();
 
+    const filtered = values.filter(v => v.isChecked);
+
     return (
         <Collapsible
             open={isOpen}
@@ -171,15 +178,13 @@ const ChannelMenu = (props: {
             )}
         >
             <CollapsibleTrigger asChild>
-                <div className="cursor-pointer flex flex-row justify-between items-center px-2 w-full group relative">
+                <div className="">
+                <div className="cursor-pointer flex flex-row justify-between items-center w-full group relative">
                     <div className="flex flex-row gap-2 overflow-hidden text-gray-700 p-2">
                         <div className="flex-1">
                             {props.icon}
                         </div>
                         <p className="flex-1 shrink-0 whitespace-nowrap font-medium text-sm pt-px">{props.title} Channels</p>
-                        {values.filter(v => v.isChecked).map((v, i) => (
-                            <ChannelBadge key={i} value={v.value}/>
-                        ))}
                     </div>
                     <Button variant="ghost" size="icon">
                         <EllipsisVertical className={clsx(
@@ -189,7 +194,15 @@ const ChannelMenu = (props: {
                         )}/>
                         <span className="sr-only">Toggle</span>
                     </Button>
-                </div>  
+                </div>
+                {filtered.length > 0 &&
+                    <div className="flex flex-row items-center gap-2 overflow-hidden pl-2 pb-2">
+                        {filtered.map((v, i) => (
+                            <ChannelBadge key={i} value={v.value}/>
+                        ))}
+                    </div>
+                }
+                </div>
             </CollapsibleTrigger>
             <CollapsibleContent
                 className="overflow-hidden 
@@ -364,6 +377,7 @@ const CommandPrompt = (props: {
                         <CommandEntry
                             key={i}
                             {...sc}
+                            id={sc.group + "::" + sc.id}
                             filterTerm={formMessage ? "" : searchLow}
                             selectItem={() => setFormMessage(fm => fm == sc.messageEnvelopeId ? null : sc.messageEnvelopeId)}
                         />
@@ -376,7 +390,7 @@ const CommandPrompt = (props: {
                             ).map((v, j) => (
                                 <CommandEntry
                                     key={j}
-                                    id={sc.id + "::" + v.id}
+                                    id={sc.group + "::" + sc.id + "::" + v.id}
                                     badge="sub"
                                     filterTerm={formMessage ? "" : searchLow}
                                     selectItem={() => setFormMessage(fm => fm == sc.messageEnvelopeId ? null : sc.messageEnvelopeId)}
@@ -423,6 +437,7 @@ const ConsoleView = () => {
             <div className="flex flex-row">
                 <Input
                     className="flex-1 rounded-r-none rounded-tl-none border-r-0 z-10"
+                    placeholder={`internal::message heading="hello" message="test"`}
                     onChange={(e) => {
                         const val = e.target.value;
                         if (val !== "") {
@@ -442,27 +457,85 @@ const ConsoleView = () => {
 }
 
 export default function ChannelTest() {
+    const _user = bStore.use.user();
+
+    console.log(_user);
+
     return (
         <ResizablePanelGroup direction="horizontal" className="h-screen">
             <ResizablePanel defaultSize={30} minSize={20}>
-                <div className="h-screen">
-                    <div className="flex flex-row items-center p-2 mb-2 gap-4 border-rose-800 border-l-4">
+                <div className="h-screen flex flex-col">
+                    <div className="flex flex-row items-center p-3 px-4 gap-2 border-b group">
                         {/* <Image src={"/icon.svg"} alt="WashU Satellite" width={30} height={30}/> */}
-                        <h1 className="font-medium text-base px-2">Mission Dashboard</h1>
+                        <h1 className="font-medium cursor-pointer">Mission Dashboard</h1>
+                        <ChevronDown className="w-4 hidden group-hover:block"/>
                     </div>
-                    <div className="flex flex-col gap-2 px-2">
-                        {channelGroups.map((cg, i) => (
-                            <ChannelMenu
-                                key={i}
-                                title={cg.title}
-                                icon={cg.icon}
-                                channels={cg.channels}
-                            />
-                        ))}
+                    <div className="flex-1 overflow-scroll p-2">
+                        <div className="flex flex-col gap-2 overflow-scroll">
+                            {channelGroups.map((cg, i) => (
+                                <ChannelMenu
+                                    key={i}
+                                    title={cg.group}
+                                    icon={cg.icon}
+                                    channels={cg.channels}
+                                />
+                            ))}
+                        </div>
+                    </div>
+                    <div className="flex flex-row justify-between border-t p-4 flex-wrap gap-2">
+                        <div className="flex flex-row gap-2 flex-wrap">
+                            {_user &&
+                                <Avatar className="w-16 h-16">
+                                    <AvatarImage
+                                        src={_user?.avatar}
+                                        alt={`@${_user?.username}`}
+                                    />
+                                    <AvatarFallback>
+                                        {_user?.username[0]}
+                                    </AvatarFallback>
+                                </Avatar>
+                            }
+                            <div>
+                                <Tooltip>
+                                    <TooltipTrigger asChild>
+                                        <h3 className="font-semibold">Nate Hayman</h3>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                        @{_user?.username}
+                                    </TooltipContent>
+                                </Tooltip>
+                                <p className="text-xs">Software Engineering</p>
+                                {true ? (
+                                    <div className="flex flex-row items-center gap-1 hover:underline text-red-500">
+                                        <TriangleAlert className="w-3"/>
+                                        <a href="" className="font-mono text-[0.7rem] pt-[0.05rem] font-medium">UNLICENSED</a>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-row items-center gap-1 hover:underline">
+                                        <a href="" className="font-mono text-[0.7rem] text-secondary-foreground">KF0TSQ</a>
+                                        <Check className="w-3"/>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            className="cursor-pointer"
+                            onClick={async () => {
+                                await authClient.signOut({
+                                    fetchOptions: {
+                                        onSuccess: () => redirect("/sign-in")
+                                    }
+                                })
+                            }}
+                        >
+                            Sign out
+                        </Button>
                     </div>
                 </div>
             </ResizablePanel>
-            <ResizableHandle/>
+            <ResizableHandle />
             <ResizablePanel className="flex flex-col h-screen overflow-scroll justify-end p-4">
                 <ConsoleView/>
             </ResizablePanel>

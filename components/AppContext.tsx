@@ -48,7 +48,9 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
 
         console.log(`Got the token: ${token}`);
 
-        const c = new Centrifuge(`ws://localhost:8000/connection/websocket?format=protobuf`);
+        const c = new Centrifuge(`ws://localhost:8000/connection/websocket?format=protobuf`, {
+            token: token
+        });
 
         c.on('connected', ctx => {
             console.log("Connected to server");

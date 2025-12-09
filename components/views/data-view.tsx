@@ -14,7 +14,7 @@ import {
     useReactTable,
     VisibilityState,
 } from "@tanstack/react-table"
-import { ArrowUpDown, ChevronDown, MoreHorizontal } from "lucide-react"
+import { ArrowUp, ArrowUpDown, ChevronDown, Copy, Download, ExternalLink, MoreHorizontal } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -37,14 +37,28 @@ import {
     TableRow,
 } from "@/components/ui/table"
 import { group } from "console"
-import { Badge } from "./ui/badge"
-import { Beacon_OpsMode, BeaconSchema } from "@/gen/airis/telemetry/v1/telemetry_pb"
+import { Badge } from "../ui/badge"
+import { Beacon, Beacon_OpsMode, BeaconSchema } from "@/gen/airis/telemetry/v1/telemetry_pb"
 import clsx from "clsx"
-import { Collapsible } from "./ui/collapsible"
+import { Collapsible } from "../ui/collapsible"
 import { CollapsibleContent, CollapsibleTrigger } from "@radix-ui/react-collapsible"
 import { bStore, MessageDetails } from "@/hooks/useAppStore"
 import { Message } from "@/gen/messages/transport/v1/transport_pb"
-import { ChannelBadge } from "./ChannelTest"
+import { ChannelBadge } from "../channel-menu"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+
+function formatValue(val: any) {
+    if (typeof val === 'bigint') {
+        return val;
+    }
+
+    if (val["seconds"]) {
+        return (new Date(Number(val.seconds) * 1000)).toLocaleString('en-US');
+    }
+
+    const num = +val;
+    return !Number.isNaN(num) ? num.toFixed(2) : val;
+}
 
 export const columns: ColumnDef<MessageDetails>[] = [
     {
@@ -114,6 +128,21 @@ export const columns: ColumnDef<MessageDetails>[] = [
                         </p>
                     </CollapsibleTrigger>
                 )
+            case 'airisBeacon':
+                const beacon: Beacon = row.getValue("data");
+
+                return (
+                    <CollapsibleTrigger asChild>
+                        <p className="cursor-pointer text-wrap line-clamp-1 text-secondary-foreground/80">
+                            {Object.keys(beacon).map((k, i) => i != 0 ?(
+                                <span key={i} className="mr-2">
+                                    <span>{k}: </span>
+                                    {`${formatValue(beacon[k as keyof Beacon])}`}
+                                </span>
+                            ) : (<React.Fragment key={i} />))}
+                        </p>
+                    </CollapsibleTrigger>
+                )
             }
         },
     },
@@ -180,6 +209,64 @@ function MessageContent(props: {
                 <h4 className="font-semibold">{d.heading}</h4>
                 <p>{d.message}</p>
             </div>
+        );
+    case 'airisBeacon':
+        const beacon = props.data as Beacon;
+
+        return (
+            <div className="flex flex-row">
+                <div className="text-wrap ml-1.5 pl-4 border-l-2 py-2 grid grid-cols-[min-content_min-content_min-content] divide-y">
+                    {Object.keys(beacon).map((k, i) => i != 0 ? (
+                        <React.Fragment key={i}>
+                            <p className="capitalize font-mono pt-1 px-2 text-foreground/80">{String(k)}</p>
+                            <div className="flex flex-row items-center border-b">
+                                <ArrowUp className="text-green-500 w-4 h-4" />
+                            </div>
+                            <div className="group flex flex-row items-center border-b">
+                                <p className="pt-1 px-2 pr-5 text-nowrap">{String(formatValue(beacon[k as keyof Beacon]))}</p>
+                                <Copy
+                                    className="opacity-0 group-hover:opacity-100 w-4 h-4 cursor-pointer hover:text-foreground/80"
+                                    onClick={() => {
+                                        navigator.clipboard.writeText(`${k}: ${String(formatValue(beacon[k as keyof Beacon]))}`)
+                                    }}
+                                />
+                            </div>
+                        </React.Fragment>
+                    ) : (<React.Fragment key={i} />))}
+                </div>
+                <div className="flex flex-col">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost">
+                                <Download className="w-4 h-4 text-foreground/80"/>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            Download as CSV
+                        </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost">
+                                <Copy className="w-4 h-4 text-foreground/80"/>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            Copy table to clipboard
+                        </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost">
+                                <ExternalLink className="w-4 h-4 text-foreground/80"/>
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                            Open table in new tab
+                        </TooltipContent>
+                    </Tooltip>
+                </div>
+            </div>
         )
     }
 }
@@ -223,7 +310,7 @@ const LogRow = (props: {
     );
 }
 
-export function LogTable() {
+export default function DataView() {
     const [sorting, setSorting] = React.useState<SortingState>([]);
     const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
         []
@@ -232,7 +319,14 @@ export function LogTable() {
         React.useState<VisibilityState>({});
     const [rowSelection, setRowSelection] = React.useState({});
 
-    const data = bStore.use.messages();
+    const [navigating, setNavigating] = React.useState(false); 
+
+    let data = null;
+    if (navigating) {
+        data = bStore.getState().messages;
+    } else {
+        data = bStore.use.messages();
+    }
 
     const table = useReactTable({
         data,

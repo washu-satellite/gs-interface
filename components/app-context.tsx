@@ -2,8 +2,10 @@
 import { MessageEnvelopeSchema } from '@/gen/messages/transport/v1/transport_pb';
 import { bStore } from '@/hooks/useAppStore';
 import { authClient } from '@/lib/auth-client';
+import { cn } from '@/lib/utils';
 import { fromBinary } from '@bufbuild/protobuf';
 import { Centrifuge, Subscription } from 'centrifuge/build/protobuf';
+import { Geist, Geist_Mono } from 'next/font/google';
 import { redirect } from 'next/navigation';
 import React, { useEffect } from 'react';
 
@@ -18,10 +20,22 @@ const DefaultAppContext: AppContextProps = {
 
 const AppContext = React.createContext<AppContextProps>(DefaultAppContext);
 
+const geistSans = Geist({
+  variable: "--font-geist-sans",
+  subsets: ["latin"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
 const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
     const session = authClient.useSession();
 
     const _client = bStore.use.client();
+
+    const _theme = bStore.use.theme();
 
     const _setClient = bStore.use.setClient();
     const _subscribe = bStore.use.subscribe();
@@ -56,12 +70,6 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
             console.log("Connected to server");
         });
 
-        c.on('publication', ctx => {
-            console.log("Got a publication!");
-
-            console.log(ctx.data);
-        });
-
         c.on('message', ctx => {
             console.log("Got a message");
 
@@ -73,19 +81,26 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
             // note: always use bStore.getState() in handlers
             const channels = bStore.getState().openChannels;
 
-            // TODO: add channels to bStore
-            if (!channels.includes("telemetry"))
-                return;
+            // // TODO: add channels to bStore
+            // if (!channels.includes("telemetry"))
+            //     return;
 
             _addMessage(envelope);
         });
 
-        c.connect();
+        const sub = c.newSubscription("telemetry");
+        sub.on('publication', ctx => {
+            console.log("Got a publication!");
 
-        const sub = new Subscription(c, "internal");
+            const d = new Uint8Array(ctx.data);
+            const envelope = fromBinary(MessageEnvelopeSchema, d);
+
+            _addMessage(envelope);
+        });
         sub.subscribe();
+        _subscribe("telemetry", sub);
 
-        _subscribe("internal", sub);
+        c.connect();
         
         _setClient(c);
         return c;
@@ -108,7 +123,16 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
                 ...DefaultAppContext
             }}
         >
-            {props.children}
+            <body
+                className={cn(
+                    `${geistSans.variable} ${geistMono.variable} antialiased`,
+                    {
+                        "dark": _theme === 'dark'
+                    }
+                )}
+            >
+                {props.children}
+            </body>
         </AppContext.Provider>
     );
 }

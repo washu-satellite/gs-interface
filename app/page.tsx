@@ -1,20 +1,20 @@
 import { auth } from "@/auth";
-import ChannelTest from "@/components/ChannelTest";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 export default async function Home() {
-  const session = await auth.api.getSession({
-    headers: await headers()
-  });
+  let session = null;
+  try {
+    session = await auth.api.getSession({
+      headers: await headers()
+    });
+  } catch (e) {
+    redirect("/sign-in");
+  }
 
   if (!session) {
     redirect("/sign-in");
   }
 
-  return (
-    <div>
-      <ChannelTest/>
-    </div>
-  );
+  redirect("/dashboard/command");
 }

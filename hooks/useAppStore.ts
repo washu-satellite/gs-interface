@@ -69,17 +69,23 @@ type UserData = {
   avatar: string
 }
 
+export type ThemeOption = 'dark' | 'light';
+
 // Contains all data for managing Centrifuge socket comms
 type UserStore = {
   user: UserData | null;
+  theme: ThemeOption;
 
   setUser: (user: UserData) => void;
+  setTheme: (theme: ThemeOption) => void;
 }
 
 const createUserStore: StateCreator<UserStore, [], []> = (set) => ({
   user: null,
+  theme: 'dark',
 
-  setUser: (user) => set(() => ({ user }))
+  setUser: (user) => set(() => ({ user })),
+  setTheme: (theme) => set(() => ({ theme }))
 });
 
 // Put all the stores together

@@ -214,57 +214,63 @@ function MessageContent(props: {
         const beacon = props.data as Beacon;
 
         return (
-            <div className="flex flex-row">
-                <div className="text-wrap ml-1.5 pl-4 border-l-2 py-2 grid grid-cols-[min-content_min-content_min-content] divide-y">
-                    {Object.keys(beacon).map((k, i) => i != 0 ? (
-                        <React.Fragment key={i}>
-                            <p className="capitalize font-mono pt-1 px-2 text-foreground/80">{String(k)}</p>
-                            <div className="flex flex-row items-center border-b">
-                                <ArrowUp className="text-green-500 w-4 h-4" />
-                            </div>
-                            <div className="group flex flex-row items-center border-b">
-                                <p className="pt-1 px-2 pr-5 text-nowrap">{String(formatValue(beacon[k as keyof Beacon]))}</p>
-                                <Copy
-                                    className="opacity-0 group-hover:opacity-100 w-4 h-4 cursor-pointer hover:text-foreground/80"
-                                    onClick={() => {
-                                        navigator.clipboard.writeText(`${k}: ${String(formatValue(beacon[k as keyof Beacon]))}`)
-                                    }}
-                                />
-                            </div>
-                        </React.Fragment>
-                    ) : (<React.Fragment key={i} />))}
+            <div className="flex flex-row gap-4">
+                <div className="p-2 ml-1.5 pl-4 border-l-2">
+                    <h2 className="font-semibold text-2xl">Telemetry Beacon</h2>
+                    <p className="text-foreground/80">All top-level sensor data and statement of health information</p>
                 </div>
-                <div className="flex flex-col">
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost">
-                                <Download className="w-4 h-4 text-foreground/80"/>
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            Download as CSV
-                        </TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost">
-                                <Copy className="w-4 h-4 text-foreground/80"/>
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            Copy table to clipboard
-                        </TooltipContent>
-                    </Tooltip>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button variant="ghost">
-                                <ExternalLink className="w-4 h-4 text-foreground/80"/>
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                            Open table in new tab
-                        </TooltipContent>
-                    </Tooltip>
+                <div className="flex flex-row">
+                    <div className="text-wrap  py-2 grid grid-cols-[min-content_min-content_min-content] divide-y">
+                        {Object.keys(beacon).map((k, i) => i != 0 ? (
+                            <React.Fragment key={i}>
+                                <p className="capitalize font-mono pt-1 px-2 text-foreground/80">{String(k)}</p>
+                                <div className="flex flex-row items-center border-b">
+                                    <ArrowUp className="text-green-500 w-4 h-4" />
+                                </div>
+                                <div className="group flex flex-row items-center border-b">
+                                    <p className="pt-1 px-2 pr-5 text-nowrap">{String(formatValue(beacon[k as keyof Beacon]))}</p>
+                                    <Copy
+                                        className="opacity-0 group-hover:opacity-100 w-4 h-4 cursor-pointer hover:text-foreground/80"
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(`${k}: ${String(formatValue(beacon[k as keyof Beacon]))}`)
+                                        }}
+                                    />
+                                </div>
+                            </React.Fragment>
+                        ) : (<React.Fragment key={i} />))}
+                    </div>
+                    <div className="flex flex-col">
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost">
+                                    <Download className="w-4 h-4 text-foreground/80"/>
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="right">
+                                Download as CSV
+                            </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost">
+                                    <Copy className="w-4 h-4 text-foreground/80"/>
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="right">
+                                Copy table to clipboard
+                            </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost">
+                                    <ExternalLink className="w-4 h-4 text-foreground/80"/>
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="right">
+                                Open table in new tab
+                            </TooltipContent>
+                        </Tooltip>
+                    </div>
                 </div>
             </div>
         )

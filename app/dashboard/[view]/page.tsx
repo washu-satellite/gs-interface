@@ -7,9 +7,9 @@ import { bStore } from "@/hooks/useAppStore";
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Bell, Check, ChevronDown, Database, GamepadDirectional, PanelRightClose, PanelRightOpen, Pyramid, RadioTower, RefreshCcw, SquareTerminal, TriangleAlert } from "lucide-react";
+import { Bell, Check, ChevronDown, Database, GamepadDirectional, Moon, PanelRightClose, PanelRightOpen, Pyramid, RadioTower, RefreshCcw, Settings, SquareTerminal, Sun, TriangleAlert } from "lucide-react";
 import { redirect } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import ControlsView from "@/components/views/controls-view";
@@ -17,6 +17,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { StatField } from "@/components/stat-field";
 import CDHView from "@/components/views/cdh-view";
 import DataView from "@/components/views/data-view";
+import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarHeader, SidebarProvider } from "@/components/ui/sidebar";
 
 type NavTileType = {
     icon: ReactNode,
@@ -62,9 +63,9 @@ function NavTile(props: NavTileType & { selected?: boolean, onClick: () => void 
             <TooltipTrigger asChild>
                 <button
                     className={cn(
-                        "flex flex-col items-center gap-1 p-2 w-16 rounded-md cursor-pointer hover:bg-accent/70 text-primary/80 hover:text-primary",
+                        "flex flex-col items-center gap-1 p-2 w-16 rounded-sm cursor-pointer hover:bg-secondary text-primary/80 hover:text-primary",
                         {
-                            "bg-accent/70 text-foreground": props.selected
+                            "bg-secondary text-foreground": props.selected
                         }
                     )}
                     onClick={props.onClick}
@@ -74,7 +75,7 @@ function NavTile(props: NavTileType & { selected?: boolean, onClick: () => void 
                 </button>
             </TooltipTrigger>
             {props.description &&
-                <TooltipContent>
+                <TooltipContent side="right">
                     {props.description}
                 </TooltipContent>
             }
@@ -143,21 +144,22 @@ function UserTile() {
 function UserTileMinimal() {
     const _user = bStore.use.user();
 
-    return (
-        <div className="flex flex-row gap-2 flex-wrap p-4 w-full border-t">
-            {_user &&
-                <Avatar className="w-12 h-12">
-                    <AvatarImage
-                        src={_user?.avatar}
-                        alt={`@${_user?.username}`}
-                    />
-                    <AvatarFallback>
-                        {_user?.username[0]}
-                    </AvatarFallback>
-                </Avatar>
-            }
-        </div>
-    );
+    return _user ? (
+        <Button variant="ghost" className="w-8 h-8 relative">
+            <Avatar className="w-8 h-8 rounded-md">
+                <AvatarImage
+                    src={_user?.avatar}
+                    alt={`@${_user?.username}`}
+                />
+                <AvatarFallback>
+                    {_user?.username[0]}
+                </AvatarFallback>
+            </Avatar>
+            <div className="absolute -top-2 -right-2 text-amber-500 bg-background p-px border-2 border-background rounded-full">
+                <TriangleAlert width={1} height={1}/>
+            </div>
+        </Button>
+    ) : (<></>);
 }
 
 function ViewContent(props: {
@@ -192,7 +194,7 @@ function ModeTrigger() {
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
                 {session === "LIVE" ? (
-                    <div className="relative flex flex-row items-center gap-1 text-white rounded-md bg-red-700 px-2 cursor-pointer">
+                    <div className="relative flex flex-row items-center gap-1 text-white rounded-sm bg-red-700 px-2 cursor-pointer">
                         <div className="relative">
                             <span className="absolute w-3 h-3 bg-white opacity-30 rounded-full -mt-0.5 -ml-0.5 animate-ping"/>
                             <div className="w-2 h-2 bg-white rounded-full"/>
@@ -209,35 +211,47 @@ function ModeTrigger() {
             </DropdownMenuTrigger>
             <DropdownMenuContent>
                 <DropdownMenuGroup>
-                    <DropdownMenuItem onClick={() => setSession("LIVE")}>
+                    <DropdownMenuLabel>
+                        Data Mode
+                    </DropdownMenuLabel>
+                    <DropdownMenuCheckboxItem 
+                        checked={session === "LIVE"}
+                        onCheckedChange={() => setSession("LIVE")}
+                    >
                         Live Stream
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setSession("Playback")}>
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem
+                        checked={session === "Playback"}
+                        onCheckedChange={() => setSession("Playback")}
+                    >
                         Recordings
-                    </DropdownMenuItem>
+                    </DropdownMenuCheckboxItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
-                    <DropdownMenuItem>
+                    <DropdownMenuLabel>
+                        Orbital Passes
+                    </DropdownMenuLabel>
+                    <DropdownMenuCheckboxItem>
                         Pass #123
                         <span className="bg-muted rounded-md px-2 py-1 -my-1">10/23/25</span>
                         12:23:12 CST
-                    </DropdownMenuItem>
-                    <DropdownMenuItem>
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem>
                         Pass #122
                         <span className="bg-muted rounded-md px-2 py-1 -my-1">10/23/25</span>
                         12:23:12 CST
-                    </DropdownMenuItem>
-                    <DropdownMenuItem>
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem>
                         Pass #121
                         <span className="bg-muted rounded-md px-2 py-1 -my-1">10/23/25</span>
                         12:23:12 CST
-                    </DropdownMenuItem>
-                    <DropdownMenuItem>
+                    </DropdownMenuCheckboxItem>
+                    <DropdownMenuCheckboxItem>
                         Pass #120
                         <span className="bg-muted rounded-md px-2 py-1 -my-1">10/23/25</span>
                         12:23:12 CST
-                    </DropdownMenuItem>
+                    </DropdownMenuCheckboxItem>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
                 <DropdownMenuGroup>
@@ -251,23 +265,32 @@ function ModeTrigger() {
 }
 
 function Heading() {
+    const _setTheme = bStore.use.setTheme();
+    const _theme = bStore.use.theme();
+
     return (
-        <div className="flex flex-row items-center justify-between border-b text-nowrap gap-10 px-2">
+        <div className="sticky top-0 border-b flex flex-row items-center justify-between text-nowrap gap-10 px-4 bg-background/60 backdrop-blur-md z-50">
             <div className="flex flex-row items-center">
-                <a href="https://www.washusatellite.com" className="shrink-0">
+                {/* <a href="https://www.washusatellite.com" className="shrink-0">
                     <img src={"/logo.svg"} alt="" className="h-12 p-2 pb-3"/>
-                </a>
-                <div className="w-[0.1rem] h-5 rotate-12 bg-input ml-2 mr-3 rounded-full shrink-0"/>
+                </a> */}
+                {/* <div className="w-[0.1rem] h-5 rotate-12 bg-input ml-2 mr-3 rounded-full shrink-0"/> */}
                 <ModeTrigger />
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <div className="flex flex-row items-center p-3 gap-2 group cursor-pointer">
                             {/* <Image src={"/icon.svg"} alt="WashU Satellite" width={30} height={30}/> */}
                             <h1 className="font-bold">AIRIS Mission</h1>
-                            <ChevronDown className="w-4 opacity-0 group-hover:opacity-100"/>
+                            <ChevronDown className="w-4"/>
                         </div>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
+                        <DropdownMenuGroup>
+                            <DropdownMenuLabel>
+                                Missions
+                            </DropdownMenuLabel>
+                        </DropdownMenuGroup>
+                        <DropdownMenuSeparator />
                         <DropdownMenuGroup>
                             <DropdownMenuItem>
                                 AIRIS
@@ -305,10 +328,52 @@ function Heading() {
                         </div>
                 </div>
             </div> */}
-            <Button variant="outline" className="relative">
-                <Bell />
-                <div className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-red-500 border-input border"/>
-            </Button>
+            <div className="flex flex-row items-center">
+                <Button
+                    variant="ghost"
+                    onClick={() => {
+                        _setTheme(_theme === 'light' ? 'dark' : 'light');
+                    }}
+                >
+                    {_theme === 'light' ? (
+                        <Moon />
+                    ) : (
+                        <Sun />
+                    )}
+                </Button>
+                <Button variant="ghost">
+                    <Settings />
+                </Button>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="relative">
+                            <Bell />
+                            <span className="absolute top-0 right-0 px-1 min-w-4 rounded-full bg-red-500 border-input font-semibold text-[11px] text-white">
+                            6
+                            </span>
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                        <DropdownMenuGroup>
+                            <DropdownMenuLabel>
+                                Notifications
+                            </DropdownMenuLabel>
+                        </DropdownMenuGroup>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuGroup>
+                            <p className="p-4 px-8 text-center text-sm">You have no new notifications</p>
+                            {/* {(new Array(0)).map(n => (
+                                <DropdownMenuItem className="flex flex-row items-center">
+                                    <p className="text-wrap line-clamp-1"></p>
+                                    <div className="w-4 h-4 bg-red-500 rounded-full"/>
+                                </DropdownMenuItem>
+                            ))} */}
+                        </DropdownMenuGroup>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+                <div className="w-px h-6 bg-border mx-6"/>
+                <UserTileMinimal />
+            </div>
         </div>
     );
 }
@@ -331,78 +396,25 @@ export default function DashboardView({ params }: {
     }, []);
 
     return view ? (
-        <div className="flex flex-col h-screen">
+        <div className="flex flex-col h-screen max-h-screen">
             <Heading />
-                {expanded ? (
-                <ResizablePanelGroup direction="horizontal" className="flex-1">
-                    <ResizablePanel defaultSize={30} minSize={20}>
-                        <div className="flex flex-col h-full">
-                            <div className="flex-1 flex flex-row">
-                                <div className="flex flex-col items-center justify-between border-r bg-secondary/10 pb-4">
-                                    <div className="flex flex-col items-center p-3 gap-4 ">
-                                        {navElms.map((ne, i) => (
-                                            <NavTile
-                                                key={i}
-                                                selected={ne.id === view}
-                                                onClick={() => setView(ne.id)}
-                                                {...ne}
-                                            />
-                                        ))}
-                                    </div>
-                                    <Button variant="ghost" onClick={() => setExpanded(false)}>
-                                        <PanelRightOpen />
-                                    </Button>
-                                </div>
-                                {/* <div className="flex-1 flex flex-col">
-                                    <div className="overflow-scroll p-2">
-                                        <div className="flex flex-col gap-2 overflow-scroll">
-                                            {channelGroups.map((cg, i) => (
-                                                <ChannelMenu
-                                                    key={i}
-                                                    title={cg.group}
-                                                    icon={cg.icon}
-                                                    channels={cg.channels}
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div> */}
-                            </div>
-                            <UserTile />
-                        </div>
-                    </ResizablePanel>
-                    <ResizableHandle />
-                    <ResizablePanel className="overflow-scroll">
-                        {/* <ConsoleView/> */}
-                        <ViewContent view={view} />
-                    </ResizablePanel>
-                </ResizablePanelGroup>
-                ) : (
-                    <div className="flex-1 flex flex-row">
-                        <div className="flex flex-col justify-between items-center border-r bg-secondary/10">
-                            <div className="flex flex-col items-center p-3 gap-4">
-                                {navElms.map((ne, i) => (
-                                    <NavTile
-                                        key={i}
-                                        selected={ne.id === view}
-                                        onClick={() => setView(ne.id)}
-                                        {...ne}
-                                    />
-                                ))}
-                            </div>
-                            <div className="flex flex-col items-center gap-4 text-primary/80">
-                                <Button variant="ghost" onClick={() => setExpanded(true)}>
-                                    <PanelRightClose />
-                                </Button>
-                                <UserTileMinimal />
-                            </div>
-                        </div>
-                        <div className="flex flex-col justify-end w-full overflow-scroll">
-                            <ViewContent view={view} />
-                        </div>
+            <div className="sticky top-0 flex-1 flex flex-row">
+                <div className="flex flex-col justify-between items-center border-r">
+                    <div className="sticky top-16 flex flex-col items-center p-3 py-0 gap-4">
+                        {navElms.map((ne, i) => (
+                            <NavTile
+                                key={i}
+                                selected={ne.id === view}
+                                onClick={() => setView(ne.id)}
+                                {...ne}
+                            />
+                        ))}
                     </div>
-                )}
-                
+                </div>
+                <div className="flex flex-col justify-end w-full overflow-auto">
+                    <ViewContent view={view} />
+                </div>
+            </div>
         </div>
     ) : (
         <div className="flex items-center justify-center w-full h-screen">

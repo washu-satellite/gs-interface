@@ -13,9 +13,9 @@ export function StatField(props: {
                 "text-lg" : !props.small
             }
         )}>
-            <p className="uppercase text-xs text-foreground/80">{props.title}</p>
+            <p className="uppercase text-xs text-foreground/60">{props.title}</p>
             {props.units ? (
-                <p className="font-semibold">{props.value}<span className="text-base pl-1">{props.units}</span></p>
+                <p className="font-semibold">{props.value}<span className="text-base pl-1 text-foreground/60">{props.units}</span></p>
             ) : (
                 <p className="font-semibold font-mono">{props.value}</p>
             )}

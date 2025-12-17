@@ -4,6 +4,7 @@ import { Centrifuge, Subscription } from 'centrifuge/build/protobuf';
 import { channel } from 'diagnostics_channel';
 import { StateCreator, StoreApi, UseBoundStore } from 'zustand';
 import { create } from 'zustand/react';
+import { subscribeWithSelector } from 'zustand/middleware';
 import { createAuthClient } from 'better-auth/react';
 
 export type MessageDetails = {
@@ -43,8 +44,6 @@ const createSocketStore: StateCreator<SocketStore, [], []> = (set) => ({
       return ({ subscriptions: d.subscriptions });
     }),
     addMessage: (envelope) => set((state) => {
-      console.log(envelope);
-      
       if (!envelope.messageBody.value)
         return {};
 
@@ -89,10 +88,13 @@ const createUserStore: StateCreator<UserStore, [], []> = (set) => ({
 });
 
 // Put all the stores together
-export const useBoundedStore = create<SocketStore & UserStore>()((...a) => ({
-    ...createSocketStore(...a),
-    ...createUserStore(...a)
-}));
+export const useBoundedStore = create<SocketStore & UserStore>()(
+  // Add subscription middleware
+  subscribeWithSelector((...a) => ({
+      ...createSocketStore(...a),
+      ...createUserStore(...a)
+  }))
+);
 
 // Helpful Typescript selectors for Zustand
 type WithSelectors<S> = S extends { getState: () => infer T }

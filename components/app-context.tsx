@@ -90,7 +90,7 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
 
         const sub = c.newSubscription("telemetry");
         sub.on('publication', ctx => {
-            console.log("Got a publication!");
+            // console.log("Got a publication!");
 
             const d = new Uint8Array(ctx.data);
             const envelope = fromBinary(MessageEnvelopeSchema, d);

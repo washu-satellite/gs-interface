@@ -199,7 +199,7 @@ export default function CommandView() {
     const [search, setSearch] = useState("");
 
     return (
-        <>
+        <div className="flex flex-col h-full">
             <div className="flex-1 bg-secondary/30 rounded-md p-2 rounded-b-none border border-b-0 relative">
                 {expandSearch &&
                     <CommandPrompt
@@ -225,6 +225,6 @@ export default function CommandView() {
                     Send
                 </Button>
             </div>
-        </>
+        </div>
     );
 }

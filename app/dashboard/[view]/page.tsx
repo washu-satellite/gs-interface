@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Bell, Check, ChevronDown, Database, GamepadDirectional, Moon, PanelRightClose, PanelRightOpen, Pyramid, RadioTower, RefreshCcw, Settings, SquareTerminal, Sun, TriangleAlert } from "lucide-react";
+import { ArrowUp, Bell, Check, ChevronDown, Command, Cross, Database, ExternalLink, GamepadDirectional, Moon, PanelRightClose, PanelRightOpen, PanelTopClose, Plus, Pyramid, RadioTower, RefreshCcw, Settings, SidebarClose, SidebarOpen, SquareTerminal, Sun, Triangle, TriangleAlert, X } from "lucide-react";
 import { redirect } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import ControlsView from "@/components/views/controls-view";
@@ -17,7 +17,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { StatField } from "@/components/stat-field";
 import CDHView from "@/components/views/cdh-view";
 import DataView from "@/components/views/data-view";
-import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarHeader, SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarContent, SidebarFooter, SidebarGroup, SidebarHeader, SidebarProvider } from "@/components/ui/sidebar";
 
 type NavTileType = {
     icon: ReactNode,
@@ -57,21 +57,31 @@ const navElms: NavTileType[] = [
     }
 ];
 
-function NavTile(props: NavTileType & { selected?: boolean, onClick: () => void }) {
+function NavTile(props: NavTileType & { selected?: boolean, onClick: () => void, minimized?: boolean }) {
     return (
         <Tooltip>
             <TooltipTrigger asChild>
                 <button
                     className={cn(
-                        "flex flex-col items-center gap-1 p-2 w-16 rounded-sm cursor-pointer hover:bg-secondary text-primary/80 hover:text-primary",
+                        "flex flex-col items-center justify-between rounded-sm cursor-pointer hover:bg-secondary text-primary/80 hover:text-primary transition-all duration-300",
                         {
-                            "bg-secondary text-foreground": props.selected
+                            "bg-secondary text-foreground": props.selected,
+                            "w-10 p-1.5": props.minimized,
+                            "w-16 p-2": !props.minimized
                         }
                     )}
                     onClick={props.onClick}
                 >
                     {props.icon}
-                    <p className="text-xs">{props.title}</p>
+                    <p
+                        className={cn(
+                            "text-xs overflow-hidden text-nowrap",
+                            {
+                                "w-0 h-0": props.minimized,
+                                "w-full mt-1": !props.minimized
+                            }
+                        )}
+                    >{props.title}</p>
                 </button>
             </TooltipTrigger>
             {props.description &&
@@ -155,11 +165,45 @@ function UserTileMinimal() {
                     {_user?.username[0]}
                 </AvatarFallback>
             </Avatar>
-            <div className="absolute -top-2 -right-2 text-amber-500 bg-background p-px border-2 border-background rounded-full">
-                <TriangleAlert width={1} height={1}/>
-            </div>
+            <div className="absolute -top-1 -right-1 bg-amber-500 rounded-full w-3 h-3 p-px border-2 border-secondary" />
         </Button>
     ) : (<></>);
+}
+
+function ViewHeader(props: {
+    title: string
+}) {
+    return (
+        <div className="sticky top-0 z-10 bg-background/60 backdrop-blur-sm flex flex-row items-center justify-between px-4 py-2 border-b">
+            <h2 className="font-semibold text-base">{props.title}</h2>
+            <div className="flex flex-row items-center">
+                <Button variant="ghost">
+                    <PanelTopClose className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost">
+                    <ExternalLink className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost">
+                    <Settings className="w-4 h-4" />
+                </Button>
+            </div>
+        </div>
+    )
+}
+
+function SingleViewWrapper(props: React.PropsWithChildren<{}>) {
+    return (
+        <ResizablePanelGroup
+            direction="vertical"
+        >
+            <ResizablePanel
+                defaultSize={100}
+                style={{ overflow: "scroll" }}
+            >
+                {props.children}
+            </ResizablePanel>
+        </ResizablePanelGroup>
+    );
 }
 
 function ViewContent(props: {
@@ -168,18 +212,58 @@ function ViewContent(props: {
     switch (props.view) {
         case "command":
             return (
-                <div className="flex-1 flex flex-col p-4">
-                    <CommandView />
-                </div>
+                <SingleViewWrapper>
+                    <div className="h-full flex flex-col">
+                        <ViewHeader title="Command and Control"/>
+                        <div className="flex-1 p-4">
+                            <CommandView />
+                        </div>
+                    </div>
+                </SingleViewWrapper>
             );
         case "adcs":
-            return <ControlsView />;
+            return (
+                <SingleViewWrapper>
+                    <div className="flex w-full h-full">
+                        <ControlsView />
+                    </div>
+                </SingleViewWrapper>
+            );
         case "cdh":
-            return <CDHView />;
+            return (
+                <ResizablePanelGroup
+                    direction="horizontal"
+                >
+                    <ResizablePanel
+                        defaultSize={50}
+                        style={{ overflow: "scroll" }}
+                    >
+                        <ViewHeader title="Data View"/>
+                        <div className="p-4 h-full pt-2">
+                            <DataView />
+                        </div>
+                    </ResizablePanel>
+                    <ResizableHandle
+                        className="hover:bg-blue-500"
+                    />
+                    <ResizablePanel
+                        defaultSize={50}
+                        style={{ overflow: "scroll" }}
+                    >
+                        <ViewHeader title="Command View"/>
+                        <div className="p-4 h-full pt-2">
+                            <CommandView />
+                        </div>
+                    </ResizablePanel>
+                </ResizablePanelGroup>
+            );
         case "data":
             return (
-                <div className="flex-1 flex flex-col p-4">
-                    <DataView />
+                <div className="relative h-full">
+                    <ViewHeader title="Data View"/>
+                    <div className="flex-1 flex flex-col p-4">
+                        <DataView />
+                    </div>
                 </div>
             );
         default:
@@ -269,110 +353,159 @@ function Heading() {
     const _theme = bStore.use.theme();
 
     return (
-        <div className="sticky top-0 border-b flex flex-row items-center justify-between text-nowrap gap-10 px-4 bg-background/60 backdrop-blur-md z-50">
-            <div className="flex flex-row items-center">
-                {/* <a href="https://www.washusatellite.com" className="shrink-0">
-                    <img src={"/logo.svg"} alt="" className="h-12 p-2 pb-3"/>
-                </a> */}
-                {/* <div className="w-[0.1rem] h-5 rotate-12 bg-input ml-2 mr-3 rounded-full shrink-0"/> */}
-                <ModeTrigger />
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <div className="flex flex-row items-center p-3 gap-2 group cursor-pointer">
-                            {/* <Image src={"/icon.svg"} alt="WashU Satellite" width={30} height={30}/> */}
-                            <h1 className="font-bold">AIRIS Mission</h1>
-                            <ChevronDown className="w-4"/>
-                        </div>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                        <DropdownMenuGroup>
-                            <DropdownMenuLabel>
-                                Missions
-                            </DropdownMenuLabel>
-                        </DropdownMenuGroup>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuGroup>
-                            <DropdownMenuItem>
-                                AIRIS
-                            </DropdownMenuItem>
-                        </DropdownMenuGroup>
-                        <DropdownMenuGroup>
-                            <DropdownMenuItem>
-                                SCALAR
-                            </DropdownMenuItem>
-                        </DropdownMenuGroup>
-                        <DropdownMenuGroup>
-                            <DropdownMenuItem>
-                                VECTOR
-                            </DropdownMenuItem>
-                        </DropdownMenuGroup>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
-            <div className="flex-row items-end gap-10 py-2 text-foreground/90 hidden lg:flex">
-                <StatField title="Next Pass" value="T-00:54:02"/>
-                <StatField title="Health Status" value="NOMINAL"/>
-                <StatField title="Current Mode" value="STANDBY"/>
-                <StatField title="Link SNR" value="10.24" units="dB"/>
-                <StatField title="Altitude" value="551.35" units="km"/>
-            </div>
-            {/* <div className="flex flex-row items-center">
-                <div className="flex flex-row items-center justify-between gap-1 border-amber-500 border-[0.06rem] rounded-xl px-2 py-1 text-amber-500">
-                        <div className="flex flex-row items-center gap-1">
-                            <TriangleAlert className="shrink-0 w-4"/>
-                            <p className="text-wrap line-clamp-1 text-xs">Your account does not have an associated FCC license. You will be unable to author any commands until you have been properly verified as a licensed operator</p>
-                        </div>
-                        <div className="flex flex-row items-center gap-1">
-                            <p className="font-bold text-sm">+10</p>
-                            <ChevronDown className="w-4"/>
-                        </div>
+        <div className="sticky top-0 z-50">
+            <div className="flex flex-row items-center justify-between text-nowrap gap-10 pr-4">
+                <div className="flex flex-row items-center">
+                    {/* <a href="https://www.washusatellite.com" className="shrink-0">
+                        <img src={"/logo.svg"} alt="" className="h-12 p-2 pb-3"/>
+                    </a> */}
+                    {/* <div className="w-[0.1rem] h-5 rotate-12 bg-input ml-2 mr-3 rounded-full shrink-0"/> */}
+                    <ModeTrigger />
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <div className="flex flex-row items-center p-3 gap-2 group cursor-pointer">
+                                {/* <Image src={"/icon.svg"} alt="WashU Satellite" width={30} height={30}/> */}
+                                <h1 className="font-bold">AIRIS Mission</h1>
+                                <ChevronDown className="w-4"/>
+                            </div>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                            <DropdownMenuGroup>
+                                <DropdownMenuLabel>
+                                    Missions
+                                </DropdownMenuLabel>
+                            </DropdownMenuGroup>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuGroup>
+                                <DropdownMenuItem>
+                                    AIRIS
+                                </DropdownMenuItem>
+                            </DropdownMenuGroup>
+                            <DropdownMenuGroup>
+                                <DropdownMenuItem>
+                                    SCALAR
+                                </DropdownMenuItem>
+                            </DropdownMenuGroup>
+                            <DropdownMenuGroup>
+                                <DropdownMenuItem>
+                                    VECTOR
+                                </DropdownMenuItem>
+                            </DropdownMenuGroup>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
-            </div> */}
-            <div className="flex flex-row items-center">
+                <div className="flex-row items-end gap-10 py-2 text-foreground/90 hidden lg:flex">
+                    <StatField title="Next Pass" value="T-00:54:02"/>
+                    <StatField title="Health Status" value="NOMINAL"/>
+                    <StatField title="Current Mode" value="STANDBY"/>
+                    <StatField title="Link SNR" value="10.24" units="dB"/>
+                    <StatField title="Altitude" value="551.35" units="km"/>
+                </div>
+                {/* <div className="flex flex-row items-center">
+                    <div className="flex flex-row items-center justify-between gap-1 border-amber-500 border-[0.06rem] rounded-xl px-2 py-1 text-amber-500">
+                            <div className="flex flex-row items-center gap-1">
+                                <TriangleAlert className="shrink-0 w-4"/>
+                                <p className="text-wrap line-clamp-1 text-xs">Your account does not have an associated FCC license. You will be unable to author any commands until you have been properly verified as a licensed operator</p>
+                            </div>
+                            <div className="flex flex-row items-center gap-1">
+                                <p className="font-bold text-sm">+10</p>
+                                <ChevronDown className="w-4"/>
+                            </div>
+                    </div>
+                </div> */}
+                <div className="flex flex-row items-center">
+                    <Button
+                        variant="ghost"
+                        onClick={() => {
+                            _setTheme(_theme === 'light' ? 'dark' : 'light');
+                        }}
+                    >
+                        {_theme === 'light' ? (
+                            <Moon />
+                        ) : (
+                            <Sun />
+                        )}
+                    </Button>
+                    <Button variant="ghost">
+                        <Settings />
+                    </Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="relative">
+                                <Bell />
+                                <span className="absolute top-0 right-0 px-1 min-w-4 rounded-full bg-red-500 border-input font-semibold text-[11px] text-white">
+                                6
+                                </span>
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                            <DropdownMenuGroup>
+                                <DropdownMenuLabel>
+                                    Notifications
+                                </DropdownMenuLabel>
+                            </DropdownMenuGroup>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuGroup>
+                                <p className="p-4 px-8 text-center text-sm">You have no new notifications</p>
+                                {/* {(new Array(0)).map(n => (
+                                    <DropdownMenuItem className="flex flex-row items-center">
+                                        <p className="text-wrap line-clamp-1"></p>
+                                        <div className="w-4 h-4 bg-red-500 rounded-full"/>
+                                    </DropdownMenuItem>
+                                ))} */}
+                            </DropdownMenuGroup>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                    <div className="w-px h-6 bg-border mx-6"/>
+                    <UserTileMinimal />
+                </div>
+            </div>  
+            {/* <div className="rounded-tl-md border-t border-l h-2" /> */}
+        </div>
+    );
+}
+
+function Sidebar(props: {
+    view: string,
+    setView: (v: string) => void
+}) {
+    const [open, setOpen] = useState(true);
+
+    return (
+        <div className="flex flex-col justify-between items-center">
+            <div className="flex flex-col items-center p-3 py-3 gap-4">
                 <Button
                     variant="ghost"
-                    onClick={() => {
-                        _setTheme(_theme === 'light' ? 'dark' : 'light');
-                    }}
+                    className="-mb-1 text-secondary-foreground/80"
+                    onClick={() => setOpen(o => !o)}
                 >
-                    {_theme === 'light' ? (
-                        <Moon />
+                    {open ? (
+                        <SidebarClose />
                     ) : (
-                        <Sun />
+                        <SidebarOpen />
                     )}
                 </Button>
-                <Button variant="ghost">
-                    <Settings />
-                </Button>
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="relative">
-                            <Bell />
-                            <span className="absolute top-0 right-0 px-1 min-w-4 rounded-full bg-red-500 border-input font-semibold text-[11px] text-white">
-                            6
-                            </span>
+                {navElms.map((ne, i) => (
+                    <NavTile
+                        key={i}
+                        selected={ne.id === props.view}
+                        onClick={() => props.setView(ne.id)}
+                        minimized={!open}
+                        {...ne}
+                    />
+                ))}
+            </div>
+            <div className="flex flex-col items-center pb-4">
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button variant={open ? "default" : "ghost"}>
+                            <Plus />
                         </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                        <DropdownMenuGroup>
-                            <DropdownMenuLabel>
-                                Notifications
-                            </DropdownMenuLabel>
-                        </DropdownMenuGroup>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuGroup>
-                            <p className="p-4 px-8 text-center text-sm">You have no new notifications</p>
-                            {/* {(new Array(0)).map(n => (
-                                <DropdownMenuItem className="flex flex-row items-center">
-                                    <p className="text-wrap line-clamp-1"></p>
-                                    <div className="w-4 h-4 bg-red-500 rounded-full"/>
-                                </DropdownMenuItem>
-                            ))} */}
-                        </DropdownMenuGroup>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-                <div className="w-px h-6 bg-border mx-6"/>
-                <UserTileMinimal />
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                        Create a new view
+                    </TooltipContent>
+                </Tooltip>
             </div>
         </div>
     );
@@ -396,23 +529,14 @@ export default function DashboardView({ params }: {
     }, []);
 
     return view ? (
-        <div className="flex flex-col h-screen max-h-screen">
-            <Heading />
-            <div className="sticky top-0 flex-1 flex flex-row">
-                <div className="flex flex-col justify-between items-center border-r">
-                    <div className="sticky top-16 flex flex-col items-center p-3 py-0 gap-4">
-                        {navElms.map((ne, i) => (
-                            <NavTile
-                                key={i}
-                                selected={ne.id === view}
-                                onClick={() => setView(ne.id)}
-                                {...ne}
-                            />
-                        ))}
+        <div className="flex-1 flex flex-row bg-secondary dark:bg-secondary/50">
+            <Sidebar view={view} setView={setView} />
+            <div className="flex-1 flex flex-col h-screen max-h-screen overflow-x-hidden">
+                <Heading />
+                <div className="flex-1 flex flex-col justify-end w-full rounded-tl-md overflow-hidden relative bg-background">
+                    <div className="w-full h-full overflow-y-auto">
+                        <ViewContent view={view} />
                     </div>
-                </div>
-                <div className="flex flex-col justify-end w-full overflow-auto">
-                    <ViewContent view={view} />
                 </div>
             </div>
         </div>

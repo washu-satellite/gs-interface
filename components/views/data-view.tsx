@@ -14,7 +14,7 @@ import {
     useReactTable,
     VisibilityState,
 } from "@tanstack/react-table"
-import { ArrowUp, ArrowUpDown, ChevronDown, Copy, Download, ExternalLink, MoreHorizontal } from "lucide-react"
+import { ArrowUp, ArrowUpDown, ChevronDown, Copy, Download, ExternalLink, Flame, MoreHorizontal, RefreshCcw, Snowflake } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -47,13 +47,20 @@ import { Message } from "@/gen/messages/transport/v1/transport_pb"
 import { ChannelBadge } from "../channel-menu"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
+import { ResponsiveLine } from "@nivo/line"
+import { cn } from "@/lib/utils"
+
+function getTimeVal(val: any) {
+    return new Date(Number(val.seconds) * 1000);
+}
+
 function formatValue(val: any) {
     if (typeof val === 'bigint') {
         return val;
     }
 
     if (val["seconds"]) {
-        return (new Date(Number(val.seconds) * 1000)).toLocaleString('en-US');
+        return (getTimeVal(val)).toLocaleString('en-US');
     }
 
     const num = +val;
@@ -195,11 +202,45 @@ export const columns: ColumnDef<MessageDetails>[] = [
     //   },
 ]
 
+function getValues(messages: MessageDetails[], tId: string, tData: MessageDetails["data"], field: string) {
+    // const index = messages.findIndex(m => m.id === messageId);
+
+    console.log(tData);
+
+    const time = getTimeVal(tData["lastUplink" as keyof typeof tData]);
+
+    console.log(time);
+
+    const dataValues = messages.filter(
+        (m) => (m.id === tId) && (getTimeVal(m.data["lastUplink" as keyof typeof m.data]) <= time)
+    ).map((m, i) => ({
+        x: i,
+        y: m.data[field as keyof typeof m.data]
+    }));
+
+    console.log("VALUES");
+    console.log([
+        {
+            "id": "power",
+            "data": dataValues
+        }
+    ]);
+
+    return [
+        {
+            "id": "power",
+            "data": dataValues
+        }
+    ];
+}
+
 
 function MessageContent(props: {
     id: MessageDetails["id"],
     data: MessageDetails["data"]
 }) {
+    const _messages = bStore.use.messages();
+
     switch (props.id) {
     case 'internalMessage':
         const d = props.data as Message;
@@ -218,6 +259,36 @@ function MessageContent(props: {
                 <div className="p-2 ml-1.5 pl-4 border-l-2">
                     <h2 className="font-semibold text-2xl">Telemetry Beacon</h2>
                     <p className="text-foreground/80">All top-level sensor data and statement of health information</p>
+
+                    <ResponsiveLine
+                        data={getValues(_messages, props.id, props.data, "batVoltage")}
+                        margin={{
+                            top: 50,
+                            right: 110,
+                            bottom: 50,
+                            left: 60
+                        }}
+                        yScale={{ type: 'linear', min: 'auto', max: 'auto', stacked: true, reverse: false }}
+                        axisBottom={{ legend: 'transportation', legendOffset: 36 }}
+                        axisLeft={{ legend: 'count', legendOffset: -40 }}
+                        pointSize={10}
+                        pointColor={{ theme: 'background' }}
+                        pointBorderWidth={2}
+                        pointBorderColor={{ from: 'seriesColor' }}
+                        pointLabelYOffset={-12}
+                        enableTouchCrosshair={true}
+                        useMesh={true}
+                        legends={[
+                            {
+                                anchor: 'bottom-right',
+                                direction: 'column',
+                                translateX: 100,
+                                itemWidth: 80,
+                                itemHeight: 22,
+                                symbolShape: 'circle'
+                            }
+                        ]}
+                    />
                 </div>
                 <div className="flex flex-row">
                     <div className="text-wrap  py-2 grid grid-cols-[min-content_min-content_min-content] divide-y">
@@ -325,14 +396,26 @@ export default function DataView() {
         React.useState<VisibilityState>({});
     const [rowSelection, setRowSelection] = React.useState({});
 
-    const [navigating, setNavigating] = React.useState(false); 
+    const [navigating, setNavigating] = React.useState(false);
 
-    let data = null;
-    if (navigating) {
-        data = bStore.getState().messages;
-    } else {
-        data = bStore.use.messages();
-    }
+    const [data, setData] = React.useState<MessageDetails[]>([]);
+
+    // Avoid unnecessary component rerenders by unsubscribing from data stream
+    // when navigation is active
+    React.useEffect(() => {
+        if (navigating) return;
+
+        const unsub = bStore.subscribe(
+            (state) => state.messages,
+            (messages) => {
+                setData(messages);
+            }
+        );
+
+        return unsub; 
+    }, [navigating]);
+
+    console.log("Data view rerender");
 
     const table = useReactTable({
         data,
@@ -345,6 +428,12 @@ export default function DataView() {
         getFilteredRowModel: getFilteredRowModel(),
         onColumnVisibilityChange: setColumnVisibility,
         onRowSelectionChange: setRowSelection,
+        initialState: {
+            pagination: {
+                pageIndex: 0,
+                pageSize: 12
+            }
+        },
         state: {
             sorting,
             columnFilters,
@@ -364,34 +453,52 @@ export default function DataView() {
                     }
                     className="max-w-sm"
                 />
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="ml-auto">
-                            Fields <ChevronDown />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        {table
-                            .getAllColumns()
-                            .filter((column) => column.getCanHide())
-                            .map((column) => {
-                                return (
-                                    <DropdownMenuCheckboxItem
-                                        key={column.id}
-                                        className="capitalize"
-                                        checked={column.getIsVisible()}
-                                        onCheckedChange={(value) =>
-                                            column.toggleVisibility(!!value)
-                                        }
-                                    >
-                                        {column.id}
-                                    </DropdownMenuCheckboxItem>
-                                )
-                            })}
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                <div className="flex items-center gap-2 ml-auto">
+                    <Button
+                        variant="outline"
+                        disabled={!navigating}
+                    >
+                        <RefreshCcw />
+                    </Button>
+                    <Button
+                        variant="outline"
+                        onClick={() => setNavigating(n => !n)}
+                    >
+                        {navigating ? (
+                            <Flame />
+                        ) : (
+                            <Snowflake />
+                        )}
+                    </Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline">
+                                Fields <ChevronDown />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            {table
+                                .getAllColumns()
+                                .filter((column) => column.getCanHide())
+                                .map((column) => {
+                                    return (
+                                        <DropdownMenuCheckboxItem
+                                            key={column.id}
+                                            className="capitalize"
+                                            checked={column.getIsVisible()}
+                                            onCheckedChange={(value) =>
+                                                column.toggleVisibility(!!value)
+                                            }
+                                        >
+                                            {column.id}
+                                        </DropdownMenuCheckboxItem>
+                                    )
+                                })}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
             </div>
-            <div className="overflow-hidden rounded-md border">
+            <div className="rounded-md border">
                 <Table className="bg-secondary/30">
                     <TableHeader>
                         {table.getHeaderGroups().map((headerGroup) => (
@@ -456,7 +563,10 @@ export default function DataView() {
                     <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => table.nextPage()}
+                        onClick={() => {
+                            table.nextPage();
+                            setNavigating(true);
+                        }}
                         disabled={!table.getCanNextPage()}
                     >
                         Next

@@ -1,5 +1,9 @@
 "use client";
-import Dropdown from '@/components/Dropdown';
+import { 
+  Collapsible as Dropdown, 
+  CollapsibleTrigger, 
+  CollapsibleContent 
+} from "@/components/ui/collapsible";
 import OpenMCT from '@/components/OpenMCT'
 import { useState } from 'react';
 

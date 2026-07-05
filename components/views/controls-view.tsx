@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { StatField } from "../stat-field";
 import { Slider } from "../ui/slider";
 
+const SincMaterialTag = "sincMaterial" as any;
 
 const velAz = 0.1;  // rad/s
 const velEl = 0.08;  // rad/s
@@ -697,7 +698,7 @@ function FragAntennaPattern() {
         <mesh /* position={[6850, 0, 0]} */>
             <planeGeometry args={[10, 10, 10, 10]}/>
             {/* <meshBasicMaterial color={"hotpink"}/> */}
-            <sincMaterial />
+            <SincMaterialTag />
         </mesh>
     )
 }

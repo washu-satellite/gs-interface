@@ -22,7 +22,7 @@ import { create } from "@bufbuild/protobuf";
 import { buildEnvelope, cn } from "@/lib/utils";
 import { CommandBadgeType } from "@/types/ui";
 import { allCommands, channelGroups, CmdFormInternalMessage, cmdInternalMessage, CommandDetails, commandDetails, CommandFormProps } from "@/constants/commands";
-import { LogTable } from "./views/data-view";
+import LogTable from "./views/data-view";
 import { Avatar, AvatarImage } from "./ui/avatar";
 import { AvatarFallback } from "@radix-ui/react-avatar";
 import { authClient } from "@/lib/auth-client";

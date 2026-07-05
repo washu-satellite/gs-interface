@@ -8,7 +8,7 @@ import { bStore } from "@/hooks/useAppStore";
 import { MessageEnvelope } from "@/gen/messages/transport/v1/transport_pb";
 import { buildEnvelope } from "@/lib/utils";
 import { CommandBadgeType } from "@/types/ui";
-import { CmdFormInternalMessage, cmdInternalMessage, CommandDetails, commandDetails } from "@/constants/commands";
+import { CmdFormInternalMessage, CmdFormPointingCmd, CmdFormSafeModeExit, cmdInternalMessage, cmdPointingCmd, cmdSafeModeExit, CommandDetails, commandDetails } from "@/constants/commands";
 
 
 const CommandBadge = (props: {
@@ -99,16 +99,21 @@ function CommandForm(props: {
 }) {
     switch (props.messageId) {
     case 'internalMessage':
-        return (
-            <CmdFormInternalMessage onSubmit={(values) => props.onSubmit(values, cmdInternalMessage)} />
-        );
+        return <CmdFormInternalMessage onSubmit={(values) => props.onSubmit(values, cmdInternalMessage)} />;
+    case 'pointingCmd':
+        return <CmdFormPointingCmd onSubmit={(values) => props.onSubmit(values, cmdPointingCmd)} />;
+    case 'safeModeExitCmd':
+        return <CmdFormSafeModeExit onSubmit={(values) => props.onSubmit(values, cmdSafeModeExit)} />;
     }
 }
+
+const PUBLISH_COMMANDS: Array<MessageEnvelope["messageBody"]["case"]> = ['pointingCmd', 'safeModeExitCmd'];
 
 const CommandPrompt = (props: {
     search: string
 }) => {
     const _client = bStore.use.client();
+    const _subscriptions = bStore.use.subscriptions();
 
     const [formMessage, setFormMessage] = useState<MessageEnvelope["messageBody"]["case"] | null>(null);
 
@@ -116,15 +121,16 @@ const CommandPrompt = (props: {
 
     const onSubmitCommandForm = (values: any, cd: CommandDetails<z.ZodObject>) => {
         const message = cd.zodToMessage(values);
-
         const bytes = buildEnvelope("0", cd.messageEnvelopeId, message);
 
-        if (!_client)
-            return;
-        
-        _client.send(bytes).catch(e => {
-            console.log(e);
-        });
+        if (!_client) return;
+
+        if (PUBLISH_COMMANDS.includes(cd.messageEnvelopeId)) {
+            const cmdSub = _subscriptions.get('airis:commands');
+            cmdSub?.publish(bytes).catch(console.error);
+        } else {
+            _client.send(bytes).catch(console.error);
+        }
     }
     
     return (

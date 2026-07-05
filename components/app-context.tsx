@@ -71,37 +71,37 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
         });
 
         c.on('message', ctx => {
-            console.log("Got a message");
-
             const d = new Uint8Array(ctx.data);
             const envelope = fromBinary(MessageEnvelopeSchema, d);
-
-            console.log(`Got envelope with src: ${envelope.senderId} and dest: ${envelope.destId}`);
-
-            // note: always use bStore.getState() in handlers
-            const channels = bStore.getState().openChannels;
-
-            // // TODO: add channels to bStore
-            // if (!channels.includes("telemetry"))
-            //     return;
-
             _addMessage(envelope);
         });
 
-        const sub = c.newSubscription("telemetry");
-        sub.on('publication', ctx => {
-            // console.log("Got a publication!");
+        // Helper: subscribe to a channel, decode each publication as MessageEnvelope
+        const subscribeAiris = (channel: string) => {
+            const sub = c.newSubscription(channel);
+            sub.on('publication', ctx => {
+                const envelope = fromBinary(MessageEnvelopeSchema, new Uint8Array(ctx.data));
+                _addMessage(envelope);
+            });
+            sub.subscribe();
+            _subscribe(channel, sub);
+        };
 
-            const d = new Uint8Array(ctx.data);
-            const envelope = fromBinary(MessageEnvelopeSchema, d);
+        subscribeAiris("telemetry");
+        subscribeAiris("airis:beacon");
+        subscribeAiris("airis:gcn_alert");
+        subscribeAiris("airis:localization");
+        subscribeAiris("airis:navigation");
+        subscribeAiris("airis:event");
+        subscribeAiris("airis:image");
 
-            _addMessage(envelope);
-        });
-        sub.subscribe();
-        _subscribe("telemetry", sub);
+        // Commands channel — uplink only, no publication handler needed
+        const cmdSub = c.newSubscription("airis:commands");
+        cmdSub.subscribe();
+        _subscribe("airis:commands", cmdSub);
 
         c.connect();
-        
+
         _setClient(c);
         return c;
     }

@@ -14,7 +14,7 @@ import {
     useReactTable,
     VisibilityState,
 } from "@tanstack/react-table"
-import { ArrowUp, ArrowUpDown, ChevronDown, Copy, Download, ExternalLink, Flame, MoreHorizontal, RefreshCcw, Snowflake } from "lucide-react"
+import { ArrowUp, ArrowUpDown, ChevronDown, Copy, Download, ExternalLink, Flame, Image as ImageIcon, MoreHorizontal, RefreshCcw, Snowflake } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/table"
 import { group } from "console"
 import { Badge } from "../ui/badge"
-import { Beacon, Beacon_OpsMode, BeaconSchema } from "@/gen/airis/telemetry/v1/telemetry_pb"
+import { Beacon, EventNotification, GCNAlert, LocalizationUpdate, NavigationUpdate } from "@/gen/airis/telemetry/v1/telemetry_pb"
 import clsx from "clsx"
 import { Collapsible } from "../ui/collapsible"
 import { CollapsibleContent, CollapsibleTrigger } from "@radix-ui/react-collapsible"
@@ -49,6 +49,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 import { ResponsiveLine } from "@nivo/line"
 import { cn } from "@/lib/utils"
+import { FrameImage } from "./image-view"
 
 function getTimeVal(val: any) {
     return new Date(Number(val.seconds) * 1000);
@@ -128,6 +129,17 @@ export const columns: ColumnDef<MessageDetails>[] = [
             case 'internalMessage':
                 const data: Message = row.getValue("data");
 
+                if (data.heading === 'image') {
+                    return (
+                        <CollapsibleTrigger asChild>
+                            <p className="cursor-pointer text-wrap line-clamp-1 text-secondary-foreground/80">
+                                <ImageIcon className="inline w-3.5 h-3.5 mr-1 -mt-0.5" />
+                                burst frame — {data.message}
+                            </p>
+                        </CollapsibleTrigger>
+                    )
+                }
+
                 return (
                     <CollapsibleTrigger asChild>
                         <p className="cursor-pointer text-wrap line-clamp-1">
@@ -137,16 +149,48 @@ export const columns: ColumnDef<MessageDetails>[] = [
                 )
             case 'airisBeacon':
                 const beacon: Beacon = row.getValue("data");
-
                 return (
                     <CollapsibleTrigger asChild>
                         <p className="cursor-pointer text-wrap line-clamp-1 text-secondary-foreground/80">
-                            {Object.keys(beacon).map((k, i) => i != 0 ?(
-                                <span key={i} className="mr-2">
-                                    <span>{k}: </span>
-                                    {`${formatValue(beacon[k as keyof Beacon])}`}
-                                </span>
+                            {Object.keys(beacon).map((k, i) => i != 0 ? (
+                                <span key={i} className="mr-2"><span>{k}: </span>{`${formatValue(beacon[k as keyof Beacon])}`}</span>
                             ) : (<React.Fragment key={i} />))}
+                        </p>
+                    </CollapsibleTrigger>
+                )
+            case 'gcnAlert':
+                const gcn: GCNAlert = row.getValue("data");
+                return (
+                    <CollapsibleTrigger asChild>
+                        <p className="cursor-pointer line-clamp-1 text-secondary-foreground/80">
+                            burst_id: {String(gcn.burstId)} ra: {gcn.ra.toFixed(4)} dec: {gcn.dec.toFixed(4)} p: {gcn.probabilityScore.toFixed(3)}
+                        </p>
+                    </CollapsibleTrigger>
+                )
+            case 'navigationUpdate':
+                const nav: NavigationUpdate = row.getValue("data");
+                return (
+                    <CollapsibleTrigger asChild>
+                        <p className="cursor-pointer line-clamp-1 text-secondary-foreground/80">
+                            phase: {nav.flightPhase} alt: {nav.altitude.toFixed(1)}m lat: {nav.latitude.toFixed(4)} lon: {nav.longitude.toFixed(4)}
+                        </p>
+                    </CollapsibleTrigger>
+                )
+            case 'localizationUpdate':
+                const loc: LocalizationUpdate = row.getValue("data");
+                return (
+                    <CollapsibleTrigger asChild>
+                        <p className="cursor-pointer line-clamp-1 text-secondary-foreground/80">
+                            burst_id: {loc.burstId} iter: {loc.iteration} grid: {loc.healpixGrid.length} bytes
+                        </p>
+                    </CollapsibleTrigger>
+                )
+            case 'eventNotification':
+                const evt: EventNotification = row.getValue("data");
+                return (
+                    <CollapsibleTrigger asChild>
+                        <p className="cursor-pointer line-clamp-1 text-secondary-foreground/80">
+                            {evt.eventType}{evt.detail ? `: ${evt.detail}` : ''}
                         </p>
                     </CollapsibleTrigger>
                 )
@@ -245,12 +289,70 @@ function MessageContent(props: {
     case 'internalMessage':
         const d = props.data as Message;
 
+        if (d.heading === 'image') {
+            return (
+                <div className="ml-1.5 pl-4 border-l-2 py-2">
+                    <h4 className="font-semibold mb-2">Burst Frame</h4>
+                    <FrameImage
+                        path={d.message}
+                        className="max-h-80 rounded-md border object-contain"
+                    />
+                    <p className="font-mono text-xs text-foreground/60 mt-1">{d.message}</p>
+                </div>
+            );
+        }
+
         return (
             <div className="text-wrap ml-1.5 pl-4 border-l-2 py-2">
                 <h4 className="font-semibold">{d.heading}</h4>
                 <p>{d.message}</p>
             </div>
         );
+    case 'gcnAlert': {
+        const gcn = props.data as GCNAlert;
+        return (
+            <div className="ml-1.5 pl-4 border-l-2 py-2 grid grid-cols-[min-content_1fr] gap-x-6 gap-y-1">
+                <p className="font-mono text-foreground/70">burst_id</p><p>{String(gcn.burstId)}</p>
+                <p className="font-mono text-foreground/70">ra</p><p>{gcn.ra}</p>
+                <p className="font-mono text-foreground/70">dec</p><p>{gcn.dec}</p>
+                <p className="font-mono text-foreground/70">probability</p><p>{gcn.probabilityScore}</p>
+                <p className="font-mono text-foreground/70">fluence</p><p>{gcn.estimatedFluence}</p>
+                <p className="font-mono text-foreground/70">spectral_index</p><p>{gcn.spectralIndex}</p>
+            </div>
+        );
+    }
+    case 'navigationUpdate': {
+        const nav = props.data as NavigationUpdate;
+        return (
+            <div className="ml-1.5 pl-4 border-l-2 py-2 grid grid-cols-[min-content_1fr] gap-x-6 gap-y-1">
+                <p className="font-mono text-foreground/70">flight_phase</p><p>{nav.flightPhase}</p>
+                <p className="font-mono text-foreground/70">altitude</p><p>{nav.altitude} m</p>
+                <p className="font-mono text-foreground/70">lat / lon</p><p>{nav.latitude.toFixed(6)}, {nav.longitude.toFixed(6)}</p>
+                <p className="font-mono text-foreground/70">velocity N/E/D</p><p>{nav.velocityN} / {nav.velocityE} / {nav.velocityD} m/s</p>
+                <p className="font-mono text-foreground/70">sun az/el</p><p>{nav.sunAzimuth}° / {nav.sunElevation}°</p>
+                <p className="font-mono text-foreground/70">pointing az/el</p><p>{nav.pointingAzimuth}° / {nav.pointingElevation}°</p>
+            </div>
+        );
+    }
+    case 'localizationUpdate': {
+        const loc = props.data as LocalizationUpdate;
+        return (
+            <div className="ml-1.5 pl-4 border-l-2 py-2 grid grid-cols-[min-content_1fr] gap-x-6 gap-y-1">
+                <p className="font-mono text-foreground/70">burst_id</p><p>{loc.burstId}</p>
+                <p className="font-mono text-foreground/70">iteration</p><p>{loc.iteration}</p>
+                <p className="font-mono text-foreground/70">healpix_grid</p><p>{loc.healpixGrid.length} bytes</p>
+            </div>
+        );
+    }
+    case 'eventNotification': {
+        const evt = props.data as EventNotification;
+        return (
+            <div className="ml-1.5 pl-4 border-l-2 py-2">
+                <h4 className="font-semibold">{evt.eventType}</h4>
+                {evt.detail && <p className="text-foreground/80 mt-1">{evt.detail}</p>}
+            </div>
+        );
+    }
     case 'airisBeacon':
         const beacon = props.data as Beacon;
 

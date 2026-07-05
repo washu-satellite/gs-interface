@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { ArrowUp, Bell, Check, ChevronDown, Command, Cross, Database, ExternalLink, GamepadDirectional, Moon, PanelRightClose, PanelRightOpen, PanelTopClose, Plus, Pyramid, RadioTower, RefreshCcw, Settings, SidebarClose, SidebarOpen, SquareTerminal, Sun, Triangle, TriangleAlert, X } from "lucide-react";
+import { ArrowUp, Bell, Check, ChevronDown, Command, Cross, Database, ExternalLink, GamepadDirectional, Image as ImageIcon, LineChart, Moon, PanelRightClose, PanelRightOpen, PanelTopClose, Plus, Pyramid, RadioTower, RefreshCcw, Settings, SidebarClose, SidebarOpen, SquareTerminal, Sun, Triangle, TriangleAlert, X } from "lucide-react";
 import { redirect } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import ControlsView from "@/components/views/controls-view";
@@ -17,6 +17,8 @@ import { Spinner } from "@/components/ui/spinner";
 import { StatField } from "@/components/stat-field";
 import CDHView from "@/components/views/cdh-view";
 import DataView from "@/components/views/data-view";
+import TelemetryView from "@/components/views/telemetry-view";
+import ImageView from "@/components/views/image-view";
 import { SidebarContent, SidebarFooter, SidebarGroup, SidebarHeader, SidebarProvider } from "@/components/ui/sidebar";
 
 type NavTileType = {
@@ -33,6 +35,18 @@ const navElms: NavTileType[] = [
         title: "Data",
         description: "Mission data from all channels",
         id: "data"
+    },
+    {
+        icon: <LineChart className="w-4"/>,
+        title: "Telemetry",
+        description: "Live beacon & navigation telemetry plots",
+        id: "telemetry"
+    },
+    {
+        icon: <ImageIcon className="w-4"/>,
+        title: "Images",
+        description: "Gamma-ray burst camera frames",
+        id: "images"
     },
     {
         icon: <Pyramid className="w-4"/>,
@@ -263,6 +277,24 @@ function ViewContent(props: {
                     <ViewHeader title="Data View"/>
                     <div className="flex-1 flex flex-col p-4">
                         <DataView />
+                    </div>
+                </div>
+            );
+        case "telemetry":
+            return (
+                <div className="relative h-full">
+                    <ViewHeader title="Telemetry"/>
+                    <div className="flex-1 flex flex-col p-4">
+                        <TelemetryView />
+                    </div>
+                </div>
+            );
+        case "images":
+            return (
+                <div className="relative h-full">
+                    <ViewHeader title="Burst Imagery"/>
+                    <div className="flex-1 flex flex-col p-4">
+                        <ImageView />
                     </div>
                 </div>
             );

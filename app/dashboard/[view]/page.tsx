@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { ArrowUp, Bell, Check, ChevronDown, Command, Cross, Database, ExternalLink, GamepadDirectional, Moon, PanelRightClose, PanelRightOpen, PanelTopClose, Plus, Pyramid, RadioTower, RefreshCcw, Settings, SidebarClose, SidebarOpen, SquareTerminal, Sun, Triangle, TriangleAlert, X } from "lucide-react";
+import { ArrowUp, Bell, Check, ChevronDown, Command, Cross, Database, ExternalLink, GamepadDirectional, Moon, PanelRightClose, PanelRightOpen, PanelTopClose, Plus, Pyramid, RadioTower, RefreshCcw, Satellite, Settings, SidebarClose, SidebarOpen, SquareTerminal, Sun, Triangle, TriangleAlert, X } from "lucide-react";
 import { redirect } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import ControlsView from "@/components/views/controls-view";
@@ -17,6 +17,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { StatField } from "@/components/stat-field";
 import CDHView from "@/components/views/cdh-view";
 import DataView from "@/components/views/data-view";
+import ScalarTelemetryView from "@/components/views/scalar-telemetry-view";
 import { SidebarContent, SidebarFooter, SidebarGroup, SidebarHeader, SidebarProvider } from "@/components/ui/sidebar";
 
 type NavTileType = {
@@ -54,6 +55,12 @@ const navElms: NavTileType[] = [
         icon: <RadioTower className="w-4"/>,
         title: "CDH",
         id: "cdh"
+    },
+    {
+        icon: <Satellite className="w-4"/>,
+        title: "SCALAR",
+        description: "SCALAR telemetry and events via F' GDS",
+        id: "scalar"
     }
 ];
 
@@ -265,6 +272,17 @@ function ViewContent(props: {
                         <DataView />
                     </div>
                 </div>
+            );
+        case "scalar":
+            return (
+                <SingleViewWrapper>
+                    <div className="h-full flex flex-col">
+                        <ViewHeader title="SCALAR Telemetry"/>
+                        <div className="flex-1 p-4 min-h-0">
+                            <ScalarTelemetryView />
+                        </div>
+                    </div>
+                </SingleViewWrapper>
             );
         default:
             return <h1 className="text-center">Unknown view</h1>;

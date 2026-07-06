@@ -1,4 +1,5 @@
 import { MessageEnvelope } from '@/gen/messages/transport/v1/transport_pb';
+import { ScalarChannelSample, ScalarEventRecord, ScalarMessage } from '@/types/scalar';
 import { Message } from '@bufbuild/protobuf';
 import { Centrifuge, Subscription } from 'centrifuge/build/protobuf';
 import { channel } from 'diagnostics_channel';
@@ -20,21 +21,33 @@ type SocketStore = {
     clientId: string;
     subscriptions: Map<string, Subscription>;
     messages: MessageDetails[];
+    // channels keep only the latest sample so slow channels are never evicted;
+    // events are kept separately so a telemetry burst can't push them out
+    scalarChannels: Record<string, ScalarChannelSample>;
+    scalarEvents: (ScalarEventRecord & { seq: number })[];
     openChannels: string[];
 
     setClient: (c: Centrifuge) => void;
     setClientId: (id: string) => void;
     subscribe: (channel: string, sub: Subscription) => void;
     addMessage: (envelope: MessageEnvelope) => void;
+    addScalarMessage: (message: ScalarMessage) => void;
     addChannel: (channel: string) => void;
     removeChannel: (channel: string) => void;
 }
+
+const SCALAR_EVENT_LIMIT = 1000;
+
+// stable React keys for events, which have no unique wire-level id
+let scalarEventSeq = 0;
 
 const createSocketStore: StateCreator<SocketStore, [], []> = (set) => ({
     client: null,
     clientId: "",
     subscriptions: new Map<string, Subscription>(),
     messages: [],
+    scalarChannels: {},
+    scalarEvents: [],
     openChannels: [],
 
     setClient: (c) => set(() => ({ client: c })),
@@ -57,6 +70,16 @@ const createSocketStore: StateCreator<SocketStore, [], []> = (set) => ({
       };
 
       return ({ messages: [...state.messages, details] });
+    }),
+    addScalarMessage: (message) => set((state) => {
+      if (message.kind === 'channel')
+        return { scalarChannels: { ...state.scalarChannels, [message.name]: message } };
+      if (message.kind === 'event')
+        return {
+          scalarEvents: [...state.scalarEvents, { ...message, seq: scalarEventSeq++ }]
+            .slice(-SCALAR_EVENT_LIMIT)
+        };
+      return {};
     }),
     addChannel: (channel) => set((state) => ({ openChannels: [...state.openChannels, channel] })),
     removeChannel: (channel) => set((state) => ({ openChannels: state.openChannels.filter(c => c !== channel) }))

@@ -42,6 +42,7 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
     const _setUser = bStore.use.setUser();
     
     const _addMessage = bStore.use.addMessage();
+    const _addScalarMessage = bStore.use.addScalarMessage();
 
     // establish user information, connect to the Centrifuge server, generate handlers
     const init = async () => {
@@ -54,6 +55,11 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
                 avatar: "https://www.washusatellite.com/headshots/nate.jpg"
             });
         }
+
+        // the session effect can fire more than once; a second client would
+        // duplicate every subscription (and double-store every message)
+        if (bStore.getState().client)
+            return;
 
         const r = await fetch("/api/get-token");
         if (!r.ok) { console.error("Failed to retrieve JWT for socket"); return; }
@@ -99,6 +105,28 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
         });
         sub.subscribe();
         _subscribe("telemetry", sub);
+
+        // SCALAR channels carry JSON published by gds-bridge (F' GDS relay)
+        const subscribeScalar = (channel: string) => {
+            const scalarSub = c.newSubscription(channel);
+            scalarSub.on('publication', ctx => {
+                try {
+                    const message = JSON.parse(new TextDecoder().decode(new Uint8Array(ctx.data)));
+                    if (message?.kind !== 'channel' && message?.kind !== 'event') {
+                        console.warn(`Unrecognized payload on ${channel}:`, message);
+                        return;
+                    }
+                    _addScalarMessage(message);
+                } catch (e) {
+                    console.error(`Bad payload on ${channel}:`, e);
+                }
+            });
+            scalarSub.subscribe();
+            _subscribe(channel, scalarSub);
+        };
+
+        subscribeScalar("scalar:telemetry");
+        subscribeScalar("scalar:events");
 
         c.connect();
         

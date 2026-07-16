@@ -13,5 +13,12 @@ export const auth = betterAuth({
     emailAndPassword: {
         enabled: true
     },
+    // Allow requests coming through the demo tunnel (Cloudflare quick tunnels
+    // hand out *.trycloudflare.com hostnames). Without this, better-auth
+    // rejects sign-in/sign-up with an "invalid origin" error.
+    trustedOrigins: [
+        "http://localhost:3000",
+        "https://*.trycloudflare.com",
+    ],
     plugins: [nextCookies()]
 });

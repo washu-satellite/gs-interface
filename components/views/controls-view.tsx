@@ -358,17 +358,351 @@ function toGeometry(geoData: any, r: number) {
     return mesh;
 }
 
+// --- Stylized Earth ------------------------------------------------------
+// Continents are painted from the real coastline GeoJSON (/map_data.json)
+// onto an equirectangular canvas, then mapped to a smooth sphere. Painting in
+// 2D is geographically exact — it avoids the triangulation "spikes" that a
+// spherical earcut produces on concave coasts and across the antimeridian —
+// while the flat two-tone palette keeps an open-world-game look.
+
+// Fetch the continent data once and reuse across scenes.
+let mapDataCache: Promise<any> | null = null;
+function loadMapData(): Promise<any> {
+    if (!mapDataCache) {
+        mapDataCache = fetch("/map_data.json").then((r) => r.json());
+    }
+    return mapDataCache;
+}
+
+const OCEAN_COLOR = "#17568f";
+const LAND_COLOR = "#4b9e5b";
+
+// Paint land/ocean into an equirectangular texture. Built once and cached.
+let earthTextureCache: THREE.CanvasTexture | null = null;
+
+function buildEarthTexture(geoData: any): THREE.CanvasTexture {
+    const W = 4096;
+    const H = 2048;
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d")!;
+
+    ctx.fillStyle = OCEAN_COLOR;
+    ctx.fillRect(0, 0, W, H);
+
+    const px = (lon: number) => ((lon + 180) / 360) * W;
+    const py = (lat: number) => ((90 - lat) / 180) * H;
+
+    ctx.fillStyle = LAND_COLOR;
+    for (const geo of geoData.geometries) {
+        if (geo.type !== "Polygon") continue;
+        // Draw each polygon shifted by ±W too, so a shape that wraps across the
+        // ±180° seam shows up on both edges of the map instead of streaking.
+        for (const shift of [-W, 0, W]) {
+            ctx.beginPath();
+            for (const ring of geo.coordinates as [number, number][][]) {
+                // Unwrap longitudes so a ring that crosses the antimeridian
+                // stays continuous rather than jumping the full width.
+                const pts: [number, number][] = [[ring[0][0], ring[0][1]]];
+                let prev = ring[0][0];
+                for (let i = 1; i < ring.length; i++) {
+                    let lon = ring[i][0];
+                    while (lon - prev > 180) lon -= 360;
+                    while (lon - prev < -180) lon += 360;
+                    pts.push([lon, ring[i][1]]);
+                    prev = lon;
+                }
+
+                ctx.moveTo(px(pts[0][0]) + shift, py(pts[0][1]));
+                for (let i = 1; i < pts.length; i++) {
+                    ctx.lineTo(px(pts[i][0]) + shift, py(pts[i][1]));
+                }
+
+                // A ring whose unwrapped longitude nets a full turn encircles a
+                // pole (e.g. Antarctica). Close it through the map edge at the
+                // pole so the whole cap fills instead of just a ring band.
+                if (Math.abs(pts[pts.length - 1][0] - pts[0][0]) > 350) {
+                    const edgeLat = pts[0][1] < 0 ? -90 : 90;
+                    ctx.lineTo(px(pts[pts.length - 1][0]) + shift, py(edgeLat));
+                    ctx.lineTo(px(pts[0][0]) + shift, py(edgeLat));
+                }
+                ctx.closePath();
+            }
+            ctx.fill("evenodd"); // inner rings (lakes) punch holes
+        }
+    }
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    return tex;
+}
+
+function useEarthTexture(): THREE.CanvasTexture | null {
+    const [tex, setTex] = useState<THREE.CanvasTexture | null>(() => earthTextureCache);
+
+    useEffect(() => {
+        if (earthTextureCache) {
+            setTex(earthTextureCache);
+            return;
+        }
+        let alive = true;
+        loadMapData().then((data) => {
+            earthTextureCache = buildEarthTexture(data);
+            if (alive) setTex(earthTextureCache);
+        });
+        return () => {
+            alive = false;
+        };
+    }, []);
+
+    return tex;
+}
+
+// Convert geographic lon/lat to a point on the globe, matching the textured
+// sphere exactly: THREE.SphereGeometry's UV convention plus the globe mesh's
+// -90° Y rotation. Returns a surface point at the given radius.
+function latLonToSpherePos(lon: number, lat: number, radius: number) {
+    const theta = ((lon + 180) * Math.PI) / 180; // u * 2π (texture: u=(lon+180)/360)
+    const phi = ((90 - lat) * Math.PI) / 180; // v * π  (texture: v=(90-lat)/180)
+    const x = -radius * Math.cos(theta) * Math.sin(phi);
+    const y = radius * Math.cos(phi);
+    const z = radius * Math.sin(theta) * Math.sin(phi);
+    // Apply the same -π/2 Y rotation the globe mesh carries.
+    const a = -Math.PI / 2;
+    return new THREE.Vector3(
+        x * Math.cos(a) + z * Math.sin(a),
+        y,
+        -x * Math.sin(a) + z * Math.cos(a)
+    );
+}
+
+// A ground-station location pin planted on the globe surface at lon/lat, with
+// a billboarded label that hides when the site rotates behind the Earth.
+function GroundStationPin(props: {
+    lon: number;
+    lat: number;
+    label: string;
+    occludeRef?: React.RefObject<THREE.Mesh | null>;
+}) {
+    const base = useMemo(() => latLonToSpherePos(props.lon, props.lat, R_EARTH), [props.lon, props.lat]);
+    const quat = useMemo(
+        () => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), base.clone().normalize()),
+        [base]
+    );
+    const pinHeight = 0.55;
+
+    return (
+        <group position={base.toArray()} quaternion={quat}>
+            {/* stem */}
+            <mesh position={[0, pinHeight / 2, 0]}>
+                <cylinderGeometry args={[0.014, 0.014, pinHeight, 8]} />
+                <meshStandardMaterial color="#e5484d" emissive="#e5484d" emissiveIntensity={0.4} />
+            </mesh>
+            {/* head */}
+            <mesh position={[0, pinHeight, 0]}>
+                <sphereGeometry args={[0.09, 16, 16]} />
+                <meshStandardMaterial color="#e5484d" emissive="#e5484d" emissiveIntensity={0.6} />
+            </mesh>
+            {/* footprint ring on the surface */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.005, 0]}>
+                <ringGeometry args={[0.05, 0.1, 28]} />
+                <meshBasicMaterial color="#e5484d" transparent opacity={0.7} side={THREE.DoubleSide} />
+            </mesh>
+            <Html
+                position={[0, pinHeight + 0.12, 0]}
+                center
+                distanceFactor={11}
+                occlude={props.occludeRef ? ([props.occludeRef] as any) : undefined}
+            >
+                <div className="flex flex-row items-center gap-1 select-none whitespace-nowrap pointer-events-none">
+                    <div className="w-2 h-2 rounded-full bg-[#e5484d] border-2 border-black" />
+                    <p className="font-mono text-xs text-white text-shadow-lg">{props.label}</p>
+                </div>
+            </Html>
+        </group>
+    );
+}
+
+// Ground stations to plot on the main globe.
+const GROUND_STATIONS = [
+    { label: "GS-2", lon: -90.1994, lat: 38.627 }, // St. Louis, MO
+];
+
+function Earth(props: { radius?: number; rotate?: boolean; stations?: boolean }) {
+    const radius = props.radius ?? R_EARTH;
+    const spin = props.rotate ?? true;
+    const groupRef = useRef<THREE.Group>(null);
+    const globeRef = useRef<THREE.Mesh>(null);
+    const map = useEarthTexture();
+
+    useFrame((_, delta) => {
+        if (spin && groupRef.current) {
+            groupRef.current.rotation.y += 0.03 * delta;
+        }
+    });
+
+    return (
+        <group ref={groupRef}>
+            {/* Globe — painted continents on a smooth sphere. The Y rotation
+                lines the texture's prime meridian up to face +X. The material
+                is keyed on the map so it recompiles once the texture arrives
+                (adding a map to an already-compiled material is ignored). */}
+            <mesh ref={globeRef} rotation={[0, -Math.PI / 2, 0]}>
+                <sphereGeometry args={[radius, 96, 96]} />
+                <meshStandardMaterial
+                    key={map ? "textured" : "plain"}
+                    map={map ?? undefined}
+                    color={map ? "#ffffff" : OCEAN_COLOR}
+                    emissive="#0a2742"
+                    emissiveIntensity={0.2}
+                    roughness={0.85}
+                    metalness={0.1}
+                />
+            </mesh>
+
+            {/* Ground-station pins (track geography as the globe spins) */}
+            {props.stations &&
+                GROUND_STATIONS.map((s) => (
+                    <GroundStationPin key={s.label} {...s} occludeRef={globeRef} />
+                ))}
+
+            {/* Soft atmospheric rim */}
+            <mesh scale={1.02}>
+                <sphereGeometry args={[radius, 48, 48]} />
+                <meshBasicMaterial
+                    color="#8ec5ff"
+                    transparent
+                    opacity={0.12}
+                    side={THREE.BackSide}
+                    depthWrite={false}
+                />
+            </mesh>
+        </group>
+    );
+}
+// -------------------------------------------------------------------------
+
+// A classic 3U CubeSat: an anodized-aluminum chassis with body-mounted solar
+// cells, the signature protruding corner rails, a payload lens, and a pair of
+// deployed whip antennas. Long axis is +X so it can fly along-track. Built
+// entirely from primitives — no external model needed.
+function CubeSat(props: { scale?: number }) {
+    const L = 0.8;   // length along +X (3U)
+    const W = 0.28;  // cross-section (Y, Z)
+    const cellColor = "#1c2a66";
+    const railColor = "#c7c7cd";
+
+    // 4 side faces (±Y, ±Z), each carrying a strip of 3 solar cells along X.
+    const faces = [
+        { axis: "y", sign: 1 },
+        { axis: "y", sign: -1 },
+        { axis: "z", sign: 1 },
+        { axis: "z", sign: -1 },
+    ] as const;
+    const cellSpan = (L * 0.9) / 3;
+
+    return (
+        <group scale={props.scale ?? 1}>
+            {/* Anodized aluminum chassis */}
+            <mesh castShadow>
+                <boxGeometry args={[L, W, W]} />
+                <meshStandardMaterial color="#9a9aa2" metalness={0.85} roughness={0.38} />
+            </mesh>
+
+            {/* Body-mounted solar cells */}
+            {faces.map((f) =>
+                [-1, 0, 1].map((c) => {
+                    const off = W / 2 + 0.008;
+                    const pos: [number, number, number] =
+                        f.axis === "y" ? [c * cellSpan, f.sign * off, 0] : [c * cellSpan, 0, f.sign * off];
+                    const args: [number, number, number] =
+                        f.axis === "y" ? [cellSpan * 0.86, 0.02, W * 0.82] : [cellSpan * 0.86, W * 0.82, 0.02];
+                    return (
+                        <mesh key={`${f.axis}${f.sign}${c}`} position={pos}>
+                            <boxGeometry args={args} />
+                            <meshStandardMaterial
+                                color={cellColor}
+                                metalness={0.45}
+                                roughness={0.3}
+                                emissive="#0a1230"
+                                emissiveIntensity={0.35}
+                            />
+                        </mesh>
+                    );
+                })
+            )}
+
+            {/* Signature corner rails running the full length */}
+            {[
+                [1, 1],
+                [1, -1],
+                [-1, 1],
+                [-1, -1],
+            ].map(([sy, sz], i) => (
+                <mesh key={i} position={[0, (sy * W) / 2, (sz * W) / 2]}>
+                    <boxGeometry args={[L * 1.06, 0.04, 0.04]} />
+                    <meshStandardMaterial color={railColor} metalness={0.9} roughness={0.25} />
+                </mesh>
+            ))}
+
+            {/* Payload lens on the +X end */}
+            <mesh position={[L / 2 + 0.03, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
+                <cylinderGeometry args={[0.07, 0.07, 0.05, 20]} />
+                <meshStandardMaterial color="#0b0f1a" metalness={0.3} roughness={0.1} emissive="#12203f" emissiveIntensity={0.5} />
+            </mesh>
+
+            {/* Deployed whip antennas off the -X end */}
+            {[1, -1].map((s) => (
+                <mesh key={s} position={[-L / 2 - 0.18, 0, s * 0.05]} rotation={[0, 0, Math.PI / 2 + s * 0.25]}>
+                    <cylinderGeometry args={[0.005, 0.005, 0.4, 6]} />
+                    <meshStandardMaterial color="#dcdce0" metalness={0.5} roughness={0.4} />
+                </mesh>
+            ))}
+        </group>
+    );
+}
+
+// Drives a CubeSat around a circular orbit and draws the ground track ring.
+// The whole orbit is tilted (Y rotation) so the +X camera reads it as an
+// ellipse and the sat is genuinely occluded by the globe on the far side.
+function SatelliteOrbit(props: { radius: number }) {
+    const satRef = useRef<THREE.Group>(null);
+    const r = props.radius;
+
+    const ringPoints = useMemo(() => {
+        const curve = new THREE.EllipseCurve(0, 0, r, r, 0, 2 * Math.PI, false, 0);
+        return curve.getPoints(160);
+    }, [r]);
+
+    useFrame((state) => {
+        const theta = state.clock.getElapsedTime() * 0.3; // rad/s
+        if (satRef.current) {
+            satRef.current.position.set(r * Math.cos(theta), r * Math.sin(theta), 0);
+            // Long axis (+X) points along velocity so it flies along-track.
+            satRef.current.rotation.z = theta + Math.PI / 2;
+        }
+    });
+
+    return (
+        <group rotation={[0, 1.0, 0.35]}>
+            <Line points={ringPoints} color="white" lineWidth={1.5} transparent opacity={0.45} />
+            <group ref={satRef}>
+                <CubeSat scale={1.2} />
+            </group>
+        </group>
+    );
+}
+
 function OrbitalScene() {
     return (
         <div className="w-40 h-40">
             <Canvas shadows camera={{ position: [2 * R_EARTH, 0, 0], near: 0.1, far: R_EARTH * 2 }}>
                 <ambientLight intensity={1}/>
                 <directionalLight position={[10, 10, 10]} castShadow />
-                <OrbitalPath /> 
-                <mesh position={[0, 0, 0]}>
-                    <sphereGeometry args={[R_EARTH, 256, 256]}/>
-                    <meshStandardMaterial color="gray"/>
-                </mesh>
+                <OrbitalPath />
+                <Earth radius={R_EARTH} rotate={false} />
                 <OrbitalLabel />
                 <GroundLabel />
                 <OrbitControls enableZoom={false}/>
@@ -445,11 +779,12 @@ function ThreeScene() {
 
     return (
         <>
-            <ambientLight intensity={1}/>
-            <directionalLight position={[10, 10, 10]} castShadow />
+            <ambientLight intensity={0.5}/>
+            <directionalLight position={[10, 10, 10]} intensity={1.4} castShadow />
             {/* <PlanetThing /> */}
             {/* <Planet /> */}
-            <Cube />
+            <Earth stations />
+            <SatelliteOrbit radius={R_EARTH + satHeight} />
             {/* <Stats /> */}
             {/* <OrbitalPath /> */}
             {/* <FragAntennaPattern /> */}
@@ -604,7 +939,7 @@ function SceneWrapper() {
     return (
         <div id="canvas-container" className="flex-1 relative dark">
             <KeyboardControls map={map}>
-                <Canvas shadows camera={{ position: [R_EARTH + satHeight, 0, 0], near: 0.1, far: R_EARTH * 3 }}>
+                <Canvas shadows camera={{ position: [2.2 * R_EARTH, 0, 0], near: 0.1, far: R_EARTH * 3 }}>
                     <ThreeScene />
                 </Canvas>
             </KeyboardControls>

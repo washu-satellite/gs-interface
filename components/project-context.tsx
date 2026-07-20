@@ -11,6 +11,7 @@ type ProjectContextValue = {
     loading: boolean;
     setActiveId: (id: string) => void;
     saveActiveConfig: (config: AdcsConfig) => Promise<void>;
+    markNotificationRead: (id: number) => Promise<void>;
 };
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -66,11 +67,16 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         [activeId]
     );
 
+    const markNotificationRead = useCallback(async (id: number) => {
+        setNotifications((ns) => ns.filter((n) => n.id !== id));
+        await fetch(`/api/notifications/${id}`, { method: "PATCH" });
+    }, []);
+
     const activeProject = projects.find((p) => p.id === activeId) ?? null;
 
     return (
         <ProjectContext.Provider
-            value={{ projects, activeId, activeProject, notifications, loading, setActiveId, saveActiveConfig }}
+            value={{ projects, activeId, activeProject, notifications, loading, setActiveId, saveActiveConfig, markNotificationRead }}
         >
             {children}
         </ProjectContext.Provider>

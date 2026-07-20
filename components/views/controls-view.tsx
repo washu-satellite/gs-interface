@@ -1,6 +1,9 @@
 "use client";
 import { Button } from "@/components/ui/button";
-import { CaseUpper, Crosshair, Expand, FastForward, Play, RotateCcw, Settings, SkipBack, SkipForward } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { CaseUpper, Check, Crosshair, Expand, FastForward, Lock, Play, RotateCcw, Settings, SkipBack, SkipForward, SlidersHorizontal, X } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -958,7 +961,214 @@ function PlaybackControls() {
     )
 }
 
+type AdcsConfig = {
+    missionName: string;
+    spacecraftId: string;
+    stationCallsign: string;
+    stationLat: string;
+    stationLon: string;
+    altitudeKm: string;
+    regime: "polar" | "sso" | "custom";
+    dataSource: "live" | "playback";
+    showOrbit: boolean;
+    showAtmosphere: boolean;
+    showStation: boolean;
+    autoRotate: boolean;
+};
+
+const DEFAULT_ADCS_CONFIG: AdcsConfig = {
+    missionName: "AIRIS Mission",
+    spacecraftId: "SCALAR-1",
+    stationCallsign: "WUSAT",
+    stationLat: "38.627",
+    stationLon: "-90.199",
+    altitudeKm: "551",
+    regime: "polar",
+    dataSource: "live",
+    showOrbit: true,
+    showAtmosphere: true,
+    showStation: true,
+    autoRotate: true,
+};
+
+function ConfigSection(props: { title: string; children: React.ReactNode }) {
+    return (
+        <div className="flex flex-col gap-2">
+            <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{props.title}</h4>
+            {props.children}
+        </div>
+    );
+}
+
+function SegmentedChoice<T extends string>(props: {
+    options: readonly { value: T; label: string }[];
+    value: T;
+    onChange: (v: T) => void;
+}) {
+    return (
+        <div className="flex flex-row gap-1">
+            {props.options.map((o) => (
+                <button
+                    key={o.value}
+                    type="button"
+                    onClick={() => props.onChange(o.value)}
+                    className={cn(
+                        "flex-1 rounded-md border px-2 py-1.5 text-xs transition-colors cursor-pointer",
+                        props.value === o.value
+                            ? "border-blue-500/50 bg-blue-500/15 text-blue-400 font-medium"
+                            : "border-border text-muted-foreground hover:bg-secondary/60"
+                    )}
+                >
+                    {o.label}
+                </button>
+            ))}
+        </div>
+    );
+}
+
+function AdcsConfigModal(props: { onCancel: () => void; onApply: (cfg: AdcsConfig) => void }) {
+    const [cfg, setCfg] = useState<AdcsConfig>(DEFAULT_ADCS_CONFIG);
+    const set = <K extends keyof AdcsConfig>(k: K, v: AdcsConfig[K]) =>
+        setCfg((c) => ({ ...c, [k]: v }));
+
+    const toggles: [keyof AdcsConfig, string][] = [
+        ["showOrbit", "Orbit track"],
+        ["showAtmosphere", "Atmosphere"],
+        ["showStation", "Ground station"],
+        ["autoRotate", "Auto-rotate globe"],
+    ];
+
+    return (
+        <div className="absolute inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60" onClick={props.onCancel} />
+            <div className="relative z-10 w-full max-w-lg max-h-[86%] flex flex-col rounded-lg border bg-background shadow-2xl">
+                <div className="flex flex-row items-center justify-between border-b px-5 py-3">
+                    <div className="flex flex-row items-center gap-2">
+                        <SlidersHorizontal className="w-4 h-4" />
+                        <h3 className="font-semibold">ADCS Configuration</h3>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={props.onCancel}>
+                        <X className="w-4 h-4" />
+                    </Button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
+                    <ConfigSection title="Mission">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="flex flex-col gap-1.5">
+                                <Label htmlFor="cfg-mission">Mission name</Label>
+                                <Input id="cfg-mission" value={cfg.missionName} onChange={(e) => set("missionName", e.target.value)} />
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                                <Label htmlFor="cfg-scid">Spacecraft ID</Label>
+                                <Input id="cfg-scid" value={cfg.spacecraftId} onChange={(e) => set("spacecraftId", e.target.value)} />
+                            </div>
+                        </div>
+                    </ConfigSection>
+
+                    <ConfigSection title="Ground Station">
+                        <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="cfg-call">Callsign</Label>
+                            <Input id="cfg-call" value={cfg.stationCallsign} onChange={(e) => set("stationCallsign", e.target.value)} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="flex flex-col gap-1.5">
+                                <Label htmlFor="cfg-lat">Latitude</Label>
+                                <Input id="cfg-lat" type="number" value={cfg.stationLat} onChange={(e) => set("stationLat", e.target.value)} />
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                                <Label htmlFor="cfg-lon">Longitude</Label>
+                                <Input id="cfg-lon" type="number" value={cfg.stationLon} onChange={(e) => set("stationLon", e.target.value)} />
+                            </div>
+                        </div>
+                    </ConfigSection>
+
+                    <ConfigSection title="Orbit">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="flex flex-col gap-1.5">
+                                <Label htmlFor="cfg-alt">Altitude (km)</Label>
+                                <Input id="cfg-alt" type="number" value={cfg.altitudeKm} onChange={(e) => set("altitudeKm", e.target.value)} />
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                                <Label>Regime</Label>
+                                <SegmentedChoice
+                                    value={cfg.regime}
+                                    onChange={(v) => set("regime", v)}
+                                    options={[
+                                        { value: "polar", label: "Polar" },
+                                        { value: "sso", label: "SSO" },
+                                        { value: "custom", label: "Custom" },
+                                    ]}
+                                />
+                            </div>
+                        </div>
+                    </ConfigSection>
+
+                    <ConfigSection title="Display">
+                        {toggles.map(([k, label]) => (
+                            <label key={k} className="flex flex-row items-center gap-2 cursor-pointer">
+                                <Checkbox checked={cfg[k] as boolean} onCheckedChange={(v) => set(k, !!v as never)} />
+                                <span className="text-sm">{label}</span>
+                            </label>
+                        ))}
+                    </ConfigSection>
+
+                    <ConfigSection title="Data Source">
+                        <SegmentedChoice
+                            value={cfg.dataSource}
+                            onChange={(v) => set("dataSource", v)}
+                            options={[
+                                { value: "live", label: "Live" },
+                                { value: "playback", label: "Playback" },
+                            ]}
+                        />
+                    </ConfigSection>
+                </div>
+
+                <div className="flex flex-row items-center justify-end gap-2 border-t px-5 py-3">
+                    <Button variant="ghost" onClick={props.onCancel}>Cancel</Button>
+                    <Button onClick={() => props.onApply(cfg)}>
+                        <Check className="w-4 h-4" /> Apply Configuration
+                    </Button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function AdcsConfigOverlay(props: { onComplete: (cfg: AdcsConfig) => void }) {
+    const [modalOpen, setModalOpen] = useState(false);
+
+    return (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-4 text-center px-6">
+                <div className="flex flex-row items-center gap-2 text-white">
+                    <Lock className="w-5 h-5" />
+                    <h2 className="text-2xl font-semibold tracking-wide">Configuration Pending</h2>
+                </div>
+                <p className="max-w-sm text-sm text-white/70">
+                    The ADCS view must be configured before telemetry and controls are enabled.
+                </p>
+                <Button size="lg" onClick={() => setModalOpen(true)}>
+                    <SlidersHorizontal className="w-4 h-4" /> Configure ADCS
+                </Button>
+            </div>
+            {modalOpen && (
+                <AdcsConfigModal
+                    onCancel={() => setModalOpen(false)}
+                    onApply={(cfg) => {
+                        setModalOpen(false);
+                        props.onComplete(cfg);
+                    }}
+                />
+            )}
+        </div>
+    );
+}
+
 function SceneWrapper() {
+    const [configured, setConfigured] = useState(false);
+
     const map = useMemo<KeyboardControlsEntry<Controls>[]>(
         () => [
             { name: Controls.forward, keys: ['ArrowUp', 'KeyW'] },
@@ -1013,6 +1223,7 @@ function SceneWrapper() {
                     buttons={modelButtons}
                 />
             </div>
+            {!configured && <AdcsConfigOverlay onComplete={() => setConfigured(true)} />}
         </div>
     );
 }

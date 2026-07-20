@@ -20,6 +20,7 @@ import DataView from "@/components/views/data-view";
 import ScalarTelemetryView from "@/components/views/scalar-telemetry-view";
 import CalendarView from "@/components/views/calendar-view";
 import { SidebarContent, SidebarFooter, SidebarGroup, SidebarHeader, SidebarProvider } from "@/components/ui/sidebar";
+import { ProjectProvider, useProject } from "@/components/project-context";
 
 type NavTileType = {
     icon: ReactNode,
@@ -387,6 +388,7 @@ function ModeTrigger() {
 function Heading() {
     const _setTheme = bStore.use.setTheme();
     const _theme = bStore.use.theme();
+    const { projects, activeProject, setActiveId } = useProject();
 
     return (
         <div className="sticky top-0 z-50">
@@ -401,31 +403,18 @@ function Heading() {
                         <DropdownMenuTrigger asChild>
                             <div className="flex flex-row items-center p-3 gap-2 group cursor-pointer">
                                 {/* <Image src={"/icon.svg"} alt="WashU Satellite" width={30} height={30}/> */}
-                                <h1 className="font-bold">AIRIS Mission</h1>
+                                <h1 className="font-bold">{activeProject?.name ?? "Mission"}</h1>
                                 <ChevronDown className="w-4"/>
                             </div>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent>
                             <DropdownMenuGroup>
-                                <DropdownMenuLabel>
-                                    Missions
-                                </DropdownMenuLabel>
-                            </DropdownMenuGroup>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuGroup>
-                                <DropdownMenuItem>
-                                    AIRIS
-                                </DropdownMenuItem>
-                            </DropdownMenuGroup>
-                            <DropdownMenuGroup>
-                                <DropdownMenuItem>
-                                    SCALAR
-                                </DropdownMenuItem>
-                            </DropdownMenuGroup>
-                            <DropdownMenuGroup>
-                                <DropdownMenuItem>
-                                    VECTOR
-                                </DropdownMenuItem>
+                                {projects.map((p) => (
+                                    <DropdownMenuItem key={p.id} onClick={() => setActiveId(p.id)}>
+                                        <span className="flex-1">{p.name}</span>
+                                        {p.id === activeProject?.id && <Check className="w-4" />}
+                                    </DropdownMenuItem>
+                                ))}
                             </DropdownMenuGroup>
                         </DropdownMenuContent>
                     </DropdownMenu>
@@ -565,17 +554,19 @@ export default function DashboardView({ params }: {
     }, []);
 
     return view ? (
-        <div className="flex-1 flex flex-row bg-secondary dark:bg-secondary/50">
-            <Sidebar view={view} setView={setView} />
-            <div className="flex-1 flex flex-col h-screen max-h-screen overflow-x-hidden">
-                <Heading />
-                <div className="flex-1 flex flex-col justify-end w-full rounded-tl-md overflow-hidden relative bg-background">
-                    <div className="w-full h-full overflow-y-auto">
-                        <ViewContent view={view} />
+        <ProjectProvider>
+            <div className="flex-1 flex flex-row bg-secondary dark:bg-secondary/50">
+                <Sidebar view={view} setView={setView} />
+                <div className="flex-1 flex flex-col h-screen max-h-screen overflow-x-hidden">
+                    <Heading />
+                    <div className="flex-1 flex flex-col justify-end w-full rounded-tl-md overflow-hidden relative bg-background">
+                        <div className="w-full h-full overflow-y-auto">
+                            <ViewContent view={view} />
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
+        </ProjectProvider>
     ) : (
         <div className="flex items-center justify-center w-full h-screen">
             <Spinner className="w-10 h-10" />

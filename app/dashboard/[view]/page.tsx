@@ -9,8 +9,8 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { ArrowUp, Bell, CalendarDays, Check, ChevronDown, Command, Cross, Database, ExternalLink, GamepadDirectional, Moon, PanelRightClose, PanelRightOpen, PanelTopClose, Plus, Pyramid, RadioTower, RefreshCcw, Satellite, Settings, SidebarClose, SidebarOpen, SquareTerminal, Sun, Triangle, TriangleAlert, X } from "lucide-react";
-import { redirect } from "next/navigation";
+import { ArrowUp, Bell, CalendarDays, Check, ChevronDown, Command, Cross, Database, ExternalLink, GamepadDirectional, LogOut, Moon, PanelRightClose, PanelRightOpen, PanelTopClose, Plus, Pyramid, RadioTower, RefreshCcw, Satellite, Settings, SidebarClose, SidebarOpen, SquareTerminal, Sun, Triangle, TriangleAlert, User, X } from "lucide-react";
+import { redirect, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import ControlsView from "@/components/views/controls-view";
 import { Spinner } from "@/components/ui/spinner";
@@ -167,22 +167,44 @@ function UserTile() {
 }
 
 function UserTileMinimal() {
-    const _user = bStore.use.user();
+    const { data: session } = authClient.useSession();
+    const router = useRouter();
+    const user = session?.user;
 
-    return _user ? (
-        <Button variant="ghost" className="w-8 h-8 relative">
-            <Avatar className="w-8 h-8 rounded-md">
-                <AvatarImage
-                    src={_user?.avatar}
-                    alt={`@${_user?.username}`}
-                />
-                <AvatarFallback>
-                    {_user?.username[0]}
-                </AvatarFallback>
-            </Avatar>
-            <div className="absolute -top-1 -right-1 bg-amber-500 rounded-full w-3 h-3 p-px border-2 border-secondary" />
-        </Button>
-    ) : (<></>);
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="w-8 h-8 p-0 relative">
+                    <Avatar className="w-8 h-8 rounded-md">
+                        <AvatarImage src={user?.image ?? undefined} alt={user?.name ?? "user"} />
+                        <AvatarFallback>{(user?.name ?? "U")[0]?.toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+                {user && (
+                    <>
+                        <DropdownMenuLabel className="flex flex-col gap-0.5">
+                            <span>{user.name}</span>
+                            <span className="text-xs font-normal text-muted-foreground truncate">{user.email}</span>
+                        </DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                    </>
+                )}
+                <DropdownMenuItem onClick={() => router.push("/profile")}>
+                    <User className="w-4 h-4" /> Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    onClick={async () => {
+                        await authClient.signOut();
+                        router.push("/sign-in");
+                    }}
+                >
+                    <LogOut className="w-4 h-4" /> Logout
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
 }
 
 function ViewHeader(props: {
@@ -388,7 +410,7 @@ function ModeTrigger({ live }: { live: boolean }) {
 function Heading() {
     const _setTheme = bStore.use.setTheme();
     const _theme = bStore.use.theme();
-    const { projects, activeProject, setActiveId, notifications } = useProject();
+    const { projects, activeProject, setActiveId, notifications, markNotificationRead } = useProject();
     const live = !!activeProject?.config?.live;
 
     return (
@@ -474,16 +496,25 @@ function Heading() {
                             ) : (
                                 <div className="max-h-80 overflow-y-auto">
                                     {notifications.map((n) => (
-                                        <DropdownMenuItem key={n.id} className="flex flex-col items-start gap-0.5">
-                                            <div className="flex flex-row items-center gap-2 w-full">
-                                                <span className={cn(
-                                                    "w-2 h-2 rounded-full shrink-0",
-                                                    n.level === "critical" ? "bg-red-500" : n.level === "warning" ? "bg-amber-500" : "bg-blue-500"
-                                                )}/>
-                                                <p className="font-medium text-sm flex-1 truncate">{n.title}</p>
+                                        <div key={n.id} className="flex flex-row items-start gap-2 px-2 py-1.5 rounded-sm hover:bg-secondary/50">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex flex-row items-center gap-2">
+                                                    <span className={cn(
+                                                        "w-2 h-2 rounded-full shrink-0",
+                                                        n.level === "critical" ? "bg-red-500" : n.level === "warning" ? "bg-amber-500" : "bg-blue-500"
+                                                    )}/>
+                                                    <p className="font-medium text-sm truncate">{n.title}</p>
+                                                </div>
+                                                {n.message && <p className="text-xs text-muted-foreground pl-4 text-wrap">{n.message}</p>}
                                             </div>
-                                            {n.message && <p className="text-xs text-muted-foreground pl-4 text-wrap">{n.message}</p>}
-                                        </DropdownMenuItem>
+                                            <button
+                                                onClick={() => markNotificationRead(n.id)}
+                                                aria-label="Mark as read"
+                                                className="shrink-0 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-secondary cursor-pointer"
+                                            >
+                                                <X className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
                                     ))}
                                 </div>
                             )}

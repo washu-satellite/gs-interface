@@ -40,6 +40,7 @@ export default function SignIn() {
                 onSubmit={form.handleSubmit(submit)}
                 className="flex-1 flex flex-col gap-4 p-4 max-w-[24rem] border rounded-md"
             >
+                <img src="/wusat-logo.png" alt="WashU Satellite" className="h-8 self-center mb-1 select-none" />
                 <h1 className="text-center capitalize font-mono text-lg">SIGN IN</h1>
                 <FormField
                     control={form.control}

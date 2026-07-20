@@ -134,25 +134,25 @@ type MissionEvent = {
 type SeedEvent = Omit<MissionEvent, "date"> & { dayOffset: number }
 
 const SEED_EVENTS: SeedEvent[] = [
-    { id: "p-1", kind: "pass", title: "Pass #124 · Svalbard", start: 8 * 60 + 12, durationMin: 11, dayOffset: 0, station: "SVAL", detail: "Max elevation 74° · AOS 08:12:04 CST" },
-    { id: "d-1", kind: "downlink", title: "Payload downlink", start: 8 * 60 + 20, durationMin: 6, dayOffset: 0, station: "SVAL", detail: "Imager buffer · ~2.1 GB" },
+    { id: "p-1", kind: "pass", title: "Pass #124 · WUSAT", start: 8 * 60 + 12, durationMin: 11, dayOffset: 0, station: "WUSAT", detail: "Max elevation 74° · AOS 08:12:04 CST" },
+    { id: "d-1", kind: "downlink", title: "Payload downlink", start: 8 * 60 + 20, durationMin: 6, dayOffset: 0, station: "WUSAT", detail: "Imager buffer · ~2.1 GB" },
     { id: "m-1", kind: "maintenance", title: "Reaction wheel bias", start: 14 * 60, durationMin: 30, dayOffset: 0, detail: "Scheduled momentum dump" },
-    { id: "p-2", kind: "pass", title: "Pass #125 · Wallops", start: 19 * 60 + 41, durationMin: 9, dayOffset: 0, station: "WLP", detail: "Max elevation 41°" },
+    { id: "p-2", kind: "pass", title: "Pass #125 · WUSAT", start: 19 * 60 + 41, durationMin: 9, dayOffset: 0, station: "WUSAT", detail: "Max elevation 41°" },
 
-    { id: "p-3", kind: "pass", title: "Pass #126 · Svalbard", start: 7 * 60 + 55, durationMin: 12, dayOffset: 1, station: "SVAL", detail: "Max elevation 68°" },
+    { id: "p-3", kind: "pass", title: "Pass #126 · WUSAT", start: 7 * 60 + 55, durationMin: 12, dayOffset: 1, station: "WUSAT", detail: "Max elevation 68°" },
     { id: "mn-1", kind: "maneuver", title: "Δv trim burn", start: 11 * 60 + 30, durationMin: 4, dayOffset: 1, detail: "Along-track, 0.8 m/s" },
-    { id: "p-4", kind: "pass", title: "Pass #127 · Fairbanks", start: 20 * 60 + 3, durationMin: 8, dayOffset: 1, station: "AKF", detail: "Max elevation 33°" },
+    { id: "p-4", kind: "pass", title: "Pass #127 · WUSAT", start: 20 * 60 + 3, durationMin: 8, dayOffset: 1, station: "WUSAT", detail: "Max elevation 33°" },
 
     { id: "a-1", kind: "anomaly", title: "EPS undervoltage review", start: 9 * 60 + 15, durationMin: 45, dayOffset: 2, detail: "Battery dipped to 6.9 V on eclipse exit" },
-    { id: "p-5", kind: "pass", title: "Pass #128 · Svalbard", start: 8 * 60 + 40, durationMin: 10, dayOffset: 2, station: "SVAL" },
-    { id: "d-2", kind: "downlink", title: "SOH downlink", start: 8 * 60 + 48, durationMin: 3, dayOffset: 2, station: "SVAL", detail: "Statement-of-health beacons" },
+    { id: "p-5", kind: "pass", title: "Pass #128 · WUSAT", start: 8 * 60 + 40, durationMin: 10, dayOffset: 2, station: "WUSAT" },
+    { id: "d-2", kind: "downlink", title: "SOH downlink", start: 8 * 60 + 48, durationMin: 3, dayOffset: 2, station: "WUSAT", detail: "Statement-of-health beacons" },
 
-    { id: "p-6", kind: "pass", title: "Pass #129 · Wallops", start: 18 * 60 + 22, durationMin: 9, dayOffset: 3, station: "WLP", detail: "Max elevation 55°" },
+    { id: "p-6", kind: "pass", title: "Pass #129 · WUSAT", start: 18 * 60 + 22, durationMin: 9, dayOffset: 3, station: "WUSAT", detail: "Max elevation 55°" },
     { id: "mn-2", kind: "maneuver", title: "Detumble check", start: 13 * 60, durationMin: 20, dayOffset: 4, detail: "Post-maneuver attitude verification" },
-    { id: "d-3", kind: "downlink", title: "Payload downlink", start: 9 * 60 + 5, durationMin: 7, dayOffset: 5, station: "SVAL", detail: "Imager buffer · ~1.6 GB" },
+    { id: "d-3", kind: "downlink", title: "Payload downlink", start: 9 * 60 + 5, durationMin: 7, dayOffset: 5, station: "WUSAT", detail: "Imager buffer · ~1.6 GB" },
 
-    { id: "p-7", kind: "pass", title: "Pass #130 · Svalbard", start: 8 * 60 + 5, durationMin: 11, dayOffset: 7, station: "SVAL", detail: "Max elevation 79°" },
-    { id: "mt-2", kind: "maintenance", title: "GS antenna service", start: 15 * 60, durationMin: 90, dayOffset: 7, station: "WLP", detail: "Wallops dish offline" },
+    { id: "p-7", kind: "pass", title: "Pass #130 · WUSAT", start: 8 * 60 + 5, durationMin: 11, dayOffset: 7, station: "WUSAT", detail: "Max elevation 79°" },
+    { id: "mt-2", kind: "maintenance", title: "GS antenna service", start: 15 * 60, durationMin: 90, dayOffset: 7, station: "WUSAT", detail: "WUSAT dish offline" },
 
     // Planning / misc so those filters are populated out of the box.
     { id: "pl-1", kind: "planning", title: "Weekly ops planning", start: 10 * 60, durationMin: 60, dayOffset: 0, detail: "Review upcoming pass windows and payload tasking" },
@@ -161,8 +161,8 @@ const SEED_EVENTS: SeedEvent[] = [
     { id: "mc-2", kind: "misc", title: "FCC license renewal", start: 12 * 60, durationMin: 20, dayOffset: 4, detail: "Paperwork due" },
 
     // A couple in the recent past so history isn't empty.
-    { id: "p-0", kind: "pass", title: "Pass #123 · Svalbard", start: 7 * 60 + 30, durationMin: 10, dayOffset: -1, station: "SVAL", detail: "Max elevation 62°" },
-    { id: "d-0", kind: "downlink", title: "Payload downlink", start: 7 * 60 + 38, durationMin: 5, dayOffset: -1, station: "SVAL" },
+    { id: "p-0", kind: "pass", title: "Pass #123 · WUSAT", start: 7 * 60 + 30, durationMin: 10, dayOffset: -1, station: "WUSAT", detail: "Max elevation 62°" },
+    { id: "d-0", kind: "downlink", title: "Payload downlink", start: 7 * 60 + 38, durationMin: 5, dayOffset: -1, station: "WUSAT" },
     { id: "a-0", kind: "anomaly", title: "Watchdog reset", start: 22 * 60 + 4, durationMin: 15, dayOffset: -3, detail: "CDH auto-recovered, logs nominal" },
 ]
 
@@ -482,7 +482,7 @@ function ScheduleSheet(props: {
                         <Label htmlFor="event-title">Title</Label>
                         <Input
                             id="event-title"
-                            placeholder="e.g. Pass #132 · Svalbard"
+                            placeholder="e.g. Pass #132 · WUSAT"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
                             autoFocus
@@ -527,7 +527,7 @@ function ScheduleSheet(props: {
                             </Label>
                             <Input
                                 id="event-station"
-                                placeholder="SVAL"
+                                placeholder="WUSAT"
                                 value={station}
                                 onChange={(e) => setStation(e.target.value)}
                             />

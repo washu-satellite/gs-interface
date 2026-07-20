@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { AdcsConfig, DEFAULT_ADCS_CONFIG } from "@/lib/projects";
+import { useProject } from "@/components/project-context";
 import { CaseUpper, Check, Crosshair, Expand, FastForward, Lock, Play, RotateCcw, Settings, SkipBack, SkipForward, SlidersHorizontal, X } from "lucide-react";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -961,36 +963,6 @@ function PlaybackControls() {
     )
 }
 
-type AdcsConfig = {
-    missionName: string;
-    spacecraftId: string;
-    stationCallsign: string;
-    stationLat: string;
-    stationLon: string;
-    altitudeKm: string;
-    regime: "polar" | "sso" | "custom";
-    dataSource: "live" | "playback";
-    showOrbit: boolean;
-    showAtmosphere: boolean;
-    showStation: boolean;
-    autoRotate: boolean;
-};
-
-const DEFAULT_ADCS_CONFIG: AdcsConfig = {
-    missionName: "AIRIS Mission",
-    spacecraftId: "SCALAR-1",
-    stationCallsign: "WUSAT",
-    stationLat: "38.627",
-    stationLon: "-90.199",
-    altitudeKm: "551",
-    regime: "polar",
-    dataSource: "live",
-    showOrbit: true,
-    showAtmosphere: true,
-    showStation: true,
-    autoRotate: true,
-};
-
 function ConfigSection(props: { title: string; children: React.ReactNode }) {
     return (
         <div className="flex flex-col gap-2">
@@ -1026,8 +998,8 @@ function SegmentedChoice<T extends string>(props: {
     );
 }
 
-function AdcsConfigModal(props: { onCancel: () => void; onApply: (cfg: AdcsConfig) => void }) {
-    const [cfg, setCfg] = useState<AdcsConfig>(DEFAULT_ADCS_CONFIG);
+function AdcsConfigModal(props: { initialConfig: AdcsConfig; onCancel: () => void; onApply: (cfg: AdcsConfig) => void }) {
+    const [cfg, setCfg] = useState<AdcsConfig>({ ...DEFAULT_ADCS_CONFIG, ...props.initialConfig });
     const set = <K extends keyof AdcsConfig>(k: K, v: AdcsConfig[K]) =>
         setCfg((c) => ({ ...c, [k]: v }));
 
@@ -1136,7 +1108,7 @@ function AdcsConfigModal(props: { onCancel: () => void; onApply: (cfg: AdcsConfi
     );
 }
 
-function AdcsConfigOverlay(props: { onComplete: (cfg: AdcsConfig) => void }) {
+function AdcsConfigOverlay(props: { projectName: string; initialConfig: AdcsConfig; onComplete: (cfg: AdcsConfig) => void }) {
     const [modalOpen, setModalOpen] = useState(false);
 
     return (
@@ -1147,7 +1119,7 @@ function AdcsConfigOverlay(props: { onComplete: (cfg: AdcsConfig) => void }) {
                     <h2 className="text-2xl font-semibold tracking-wide">Configuration Pending</h2>
                 </div>
                 <p className="max-w-sm text-sm text-white/70">
-                    The ADCS view must be configured before telemetry and controls are enabled.
+                    {props.projectName} must be configured before telemetry and controls are enabled.
                 </p>
                 <Button size="lg" onClick={() => setModalOpen(true)}>
                     <SlidersHorizontal className="w-4 h-4" /> Configure ADCS
@@ -1155,6 +1127,7 @@ function AdcsConfigOverlay(props: { onComplete: (cfg: AdcsConfig) => void }) {
             </div>
             {modalOpen && (
                 <AdcsConfigModal
+                    initialConfig={props.initialConfig}
                     onCancel={() => setModalOpen(false)}
                     onApply={(cfg) => {
                         setModalOpen(false);
@@ -1167,7 +1140,8 @@ function AdcsConfigOverlay(props: { onComplete: (cfg: AdcsConfig) => void }) {
 }
 
 function SceneWrapper() {
-    const [configured, setConfigured] = useState(false);
+    const { activeProject, saveActiveConfig } = useProject();
+    const configured = activeProject?.configured ?? false;
 
     const map = useMemo<KeyboardControlsEntry<Controls>[]>(
         () => [
@@ -1223,7 +1197,13 @@ function SceneWrapper() {
                     buttons={modelButtons}
                 />
             </div>
-            {!configured && <AdcsConfigOverlay onComplete={() => setConfigured(true)} />}
+            {!configured && (
+                <AdcsConfigOverlay
+                    projectName={activeProject?.name ?? "The ADCS view"}
+                    initialConfig={activeProject?.config ?? DEFAULT_ADCS_CONFIG}
+                    onComplete={(cfg) => saveActiveConfig(cfg)}
+                />
+            )}
         </div>
     );
 }

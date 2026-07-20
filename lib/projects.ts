@@ -11,6 +11,7 @@ export type AdcsConfig = {
     showAtmosphere: boolean;
     showStation: boolean;
     autoRotate: boolean;
+    live: boolean;
 };
 
 export const DEFAULT_ADCS_CONFIG: AdcsConfig = {
@@ -26,6 +27,7 @@ export const DEFAULT_ADCS_CONFIG: AdcsConfig = {
     showAtmosphere: true,
     showStation: true,
     autoRotate: true,
+    live: false,
 };
 
 export type Project = {
@@ -34,4 +36,13 @@ export type Project = {
     ord: number;
     config: AdcsConfig;
     configured: boolean;
+};
+
+export type Notification = {
+    id: number;
+    projectId: string;
+    level: "info" | "warning" | "critical";
+    title: string;
+    message: string | null;
+    createdAt: string;
 };

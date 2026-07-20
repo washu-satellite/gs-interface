@@ -1085,6 +1085,17 @@ function AdcsConfigModal(props: { initialConfig: AdcsConfig; onCancel: () => voi
                         ))}
                     </ConfigSection>
 
+                    <ConfigSection title="Flight Status">
+                        <SegmentedChoice
+                            value={cfg.live ? "live" : "standby"}
+                            onChange={(v) => set("live", v === "live")}
+                            options={[
+                                { value: "live", label: "Live" },
+                                { value: "standby", label: "Standby" },
+                            ]}
+                        />
+                    </ConfigSection>
+
                     <ConfigSection title="Data Source">
                         <SegmentedChoice
                             value={cfg.dataSource}

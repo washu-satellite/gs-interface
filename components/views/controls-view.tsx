@@ -665,28 +665,60 @@ function CubeSat(props: { scale?: number }) {
 }
 
 // Drives a CubeSat around a circular orbit and draws the ground track ring.
-// The whole orbit is tilted (Y rotation) so the +X camera reads it as an
-// ellipse and the sat is genuinely occluded by the globe on the far side.
+// The orbit plane is built to pass directly over the WUSAT ground station
+// (GS-2, St. Louis): an orthonormal basis {site, north} spans a polar track
+// through the site's meridian. The whole orbit co-rotates with the globe (same
+// rate as Earth's spin) so the track stays locked over WUSAT.
 function SatelliteOrbit(props: { radius: number }) {
+    const groupRef = useRef<THREE.Group>(null);
     const satRef = useRef<THREE.Group>(null);
     const r = props.radius;
 
-    const ringPoints = useMemo(() => {
-        const curve = new THREE.EllipseCurve(0, 0, r, r, 0, 2 * Math.PI, false, 0);
-        return curve.getPoints(160);
-    }, [r]);
+    const { site, north } = useMemo(() => {
+        const gs = GROUND_STATIONS[0]; // WUSAT / St. Louis
+        const site = latLonToSpherePos(gs.lon, gs.lat, 1).normalize();
+        // North tangent: the part of the world up-axis perpendicular to `site`.
+        const north = new THREE.Vector3(0, 1, 0)
+            .addScaledVector(site, -new THREE.Vector3(0, 1, 0).dot(site))
+            .normalize();
+        return { site, north };
+    }, []);
 
-    useFrame((state) => {
-        const theta = state.clock.getElapsedTime() * 0.3; // rad/s
+    const ringPoints = useMemo(() => {
+        const pts: THREE.Vector3[] = [];
+        for (let i = 0; i <= 160; i++) {
+            const t = (i / 160) * Math.PI * 2;
+            pts.push(
+                new THREE.Vector3()
+                    .addScaledVector(site, r * Math.cos(t))
+                    .addScaledVector(north, r * Math.sin(t))
+            );
+        }
+        return pts;
+    }, [site, north, r]);
+
+    useFrame((state, delta) => {
+        // Co-rotate with the globe so the ground track stays over WUSAT.
+        if (groupRef.current) groupRef.current.rotation.y += 0.03 * delta;
+
+        const theta = state.clock.getElapsedTime() * 0.3; // rad/s along-track
         if (satRef.current) {
-            satRef.current.position.set(r * Math.cos(theta), r * Math.sin(theta), 0);
-            // Long axis (+X) points along velocity so it flies along-track.
-            satRef.current.rotation.z = theta + Math.PI / 2;
+            satRef.current.position
+                .copy(site)
+                .multiplyScalar(r * Math.cos(theta))
+                .addScaledVector(north, r * Math.sin(theta));
+            // Point the bus's long axis (+X) along the velocity vector.
+            const vel = north
+                .clone()
+                .multiplyScalar(Math.cos(theta))
+                .addScaledVector(site, -Math.sin(theta))
+                .normalize();
+            satRef.current.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), vel);
         }
     });
 
     return (
-        <group rotation={[0, 1.0, 0.35]}>
+        <group ref={groupRef}>
             <Line points={ringPoints} color="white" lineWidth={1.5} transparent opacity={0.45} />
             <group ref={satRef}>
                 <CubeSat scale={1.2} />

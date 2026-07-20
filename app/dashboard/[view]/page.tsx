@@ -308,25 +308,25 @@ function ViewContent(props: {
     }
 }
 
-function ModeTrigger() {
+function ModeTrigger({ live }: { live: boolean }) {
     const [session, setSession] = useState("LIVE");
 
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                {session === "LIVE" ? (
+                {live ? (
                     <div className="relative flex flex-row items-center gap-1 text-white rounded-sm bg-red-700 px-2 cursor-pointer">
                         <div className="relative">
                             <span className="absolute w-3 h-3 bg-white opacity-30 rounded-full -mt-0.5 -ml-0.5 animate-ping"/>
                             <div className="w-2 h-2 bg-white rounded-full"/>
                         </div>
-                        
+
                         <p className="font-bold font-mono text-sm">LIVE</p>
                     </div>
                 ) : (
                     <div className="relative flex flex-row items-center gap-1 rounded-md bg-muted px-2 py-1 cursor-pointer">
-                        <RefreshCcw className="w-3.5 h-3.5"/>
-                        <p className="font-bold font-mono text-sm">PLAYBACK</p>
+                        <div className="w-2 h-2 rounded-full bg-muted-foreground/60"/>
+                        <p className="font-bold font-mono text-sm text-muted-foreground">OFFLINE</p>
                     </div>
                 )}
             </DropdownMenuTrigger>
@@ -388,7 +388,8 @@ function ModeTrigger() {
 function Heading() {
     const _setTheme = bStore.use.setTheme();
     const _theme = bStore.use.theme();
-    const { projects, activeProject, setActiveId } = useProject();
+    const { projects, activeProject, setActiveId, notifications } = useProject();
+    const live = !!activeProject?.config?.live;
 
     return (
         <div className="sticky top-0 z-50">
@@ -398,7 +399,6 @@ function Heading() {
                         <img src={"/logo.svg"} alt="" className="h-12 p-2 pb-3"/>
                     </a> */}
                     {/* <div className="w-[0.1rem] h-5 rotate-12 bg-input ml-2 mr-3 rounded-full shrink-0"/> */}
-                    <ModeTrigger />
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <div className="flex flex-row items-center p-3 gap-2 group cursor-pointer">
@@ -418,13 +418,14 @@ function Heading() {
                             </DropdownMenuGroup>
                         </DropdownMenuContent>
                     </DropdownMenu>
+                    <ModeTrigger live={live} />
                 </div>
                 <div className="flex-row items-end gap-10 py-2 text-foreground/90 hidden lg:flex">
-                    <StatField title="Next Pass" value="T-00:54:02"/>
-                    <StatField title="Health Status" value="NOMINAL"/>
-                    <StatField title="Current Mode" value="STANDBY"/>
-                    <StatField title="Link SNR" value="10.24" units="dB"/>
-                    <StatField title="Altitude" value="551.35" units="km"/>
+                    <StatField title="Next Pass" value={live ? "T-00:54:02" : "--"}/>
+                    <StatField title="Health Status" value={live ? "NOMINAL" : "--"}/>
+                    <StatField title="Current Mode" value={live ? "STANDBY" : "--"}/>
+                    <StatField title="Link SNR" value={live ? "10.24" : "--"} units={live ? "dB" : undefined}/>
+                    <StatField title="Altitude" value={live ? "551.35" : "--"} units={live ? "km" : undefined}/>
                 </div>
                 {/* <div className="flex flex-row items-center">
                     <div className="flex flex-row items-center justify-between gap-1 border-amber-500 border-[0.06rem] rounded-xl px-2 py-1 text-amber-500">
@@ -458,27 +459,34 @@ function Heading() {
                         <DropdownMenuTrigger asChild>
                             <Button variant="ghost" className="relative">
                                 <Bell />
-                                <span className="absolute top-0 right-0 px-1 min-w-4 rounded-full bg-red-500 border-input font-semibold text-[11px] text-white">
-                                6
-                                </span>
+                                {notifications.length > 0 && (
+                                    <span className="absolute top-0 right-0 px-1 min-w-4 rounded-full bg-red-500 border-input font-semibold text-[11px] text-white">
+                                        {notifications.length}
+                                    </span>
+                                )}
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                            <DropdownMenuGroup>
-                                <DropdownMenuLabel>
-                                    Notifications
-                                </DropdownMenuLabel>
-                            </DropdownMenuGroup>
+                        <DropdownMenuContent className="w-80">
+                            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
                             <DropdownMenuSeparator />
-                            <DropdownMenuGroup>
-                                <p className="p-4 px-8 text-center text-sm">You have no new notifications</p>
-                                {/* {(new Array(0)).map(n => (
-                                    <DropdownMenuItem className="flex flex-row items-center">
-                                        <p className="text-wrap line-clamp-1"></p>
-                                        <div className="w-4 h-4 bg-red-500 rounded-full"/>
-                                    </DropdownMenuItem>
-                                ))} */}
-                            </DropdownMenuGroup>
+                            {notifications.length === 0 ? (
+                                <p className="p-4 px-8 text-center text-sm text-muted-foreground">You have no new notifications</p>
+                            ) : (
+                                <div className="max-h-80 overflow-y-auto">
+                                    {notifications.map((n) => (
+                                        <DropdownMenuItem key={n.id} className="flex flex-col items-start gap-0.5">
+                                            <div className="flex flex-row items-center gap-2 w-full">
+                                                <span className={cn(
+                                                    "w-2 h-2 rounded-full shrink-0",
+                                                    n.level === "critical" ? "bg-red-500" : n.level === "warning" ? "bg-amber-500" : "bg-blue-500"
+                                                )}/>
+                                                <p className="font-medium text-sm flex-1 truncate">{n.title}</p>
+                                            </div>
+                                            {n.message && <p className="text-xs text-muted-foreground pl-4 text-wrap">{n.message}</p>}
+                                        </DropdownMenuItem>
+                                    ))}
+                                </div>
+                            )}
                         </DropdownMenuContent>
                     </DropdownMenu>
                     <div className="w-px h-6 bg-border mx-6"/>

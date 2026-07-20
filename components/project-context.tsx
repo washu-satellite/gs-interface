@@ -1,12 +1,13 @@
 "use client";
 
-import { AdcsConfig, Project } from "@/lib/projects";
+import { AdcsConfig, Notification, Project } from "@/lib/projects";
 import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
 
 type ProjectContextValue = {
     projects: Project[];
     activeId: string | null;
     activeProject: Project | null;
+    notifications: Notification[];
     loading: boolean;
     setActiveId: (id: string) => void;
     saveActiveConfig: (config: AdcsConfig) => Promise<void>;
@@ -17,6 +18,7 @@ const ProjectContext = createContext<ProjectContextValue | null>(null);
 export function ProjectProvider({ children }: { children: ReactNode }) {
     const [projects, setProjects] = useState<Project[]>([]);
     const [activeId, setActiveId] = useState<string | null>(null);
+    const [notifications, setNotifications] = useState<Notification[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -34,6 +36,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             alive = false;
         };
     }, []);
+
+    useEffect(() => {
+        if (!activeId) {
+            setNotifications([]);
+            return;
+        }
+        let alive = true;
+        fetch(`/api/projects/${activeId}/notifications`)
+            .then((r) => r.json())
+            .then((data: Notification[]) => alive && setNotifications(data))
+            .catch(() => alive && setNotifications([]));
+        return () => {
+            alive = false;
+        };
+    }, [activeId]);
 
     const saveActiveConfig = useCallback(
         async (config: AdcsConfig) => {
@@ -53,7 +70,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     return (
         <ProjectContext.Provider
-            value={{ projects, activeId, activeProject, loading, setActiveId, saveActiveConfig }}
+            value={{ projects, activeId, activeProject, notifications, loading, setActiveId, saveActiveConfig }}
         >
             {children}
         </ProjectContext.Provider>

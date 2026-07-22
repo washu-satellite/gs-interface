@@ -14,6 +14,8 @@ type ProjectContextValue = {
     setActiveId: (id: string) => void;
     saveActiveConfig: (config: AdcsConfig) => Promise<void>;
     markNotificationRead: (id: number) => Promise<void>;
+    pushNotification: (input: { level?: Notification["level"]; title: string; message?: string | null }) => Promise<Notification | null>;
+    clearNotifications: () => Promise<void>;
     createView: (name: string, blocks: ViewItem[]) => Promise<DashboardView | null>;
     deleteView: (id: number) => Promise<void>;
     reorderViews: (orderedIds: number[]) => Promise<void>;
@@ -78,6 +80,28 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         setNotifications((ns) => ns.filter((n) => n.id !== id));
         await fetch(`/api/notifications/${id}`, { method: "PATCH" });
     }, []);
+
+    const pushNotification = useCallback(
+        async (input: { level?: Notification["level"]; title: string; message?: string | null }) => {
+            if (!activeId) return null;
+            const res = await fetch(`/api/projects/${activeId}/notifications`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ level: input.level ?? "info", title: input.title, message: input.message ?? null }),
+            });
+            if (!res.ok) return null;
+            const created: Notification = await res.json();
+            setNotifications((ns) => [created, ...ns]);
+            return created;
+        },
+        [activeId]
+    );
+
+    const clearNotifications = useCallback(async () => {
+        if (!activeId) return;
+        setNotifications([]);
+        await fetch(`/api/projects/${activeId}/notifications`, { method: "DELETE" });
+    }, [activeId]);
 
     useEffect(() => {
         if (!activeId) {
@@ -147,7 +171,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
     return (
         <ProjectContext.Provider
-            value={{ projects, activeId, activeProject, notifications, views, loading, setActiveId, saveActiveConfig, markNotificationRead, createView, deleteView, reorderViews, renameView }}
+            value={{ projects, activeId, activeProject, notifications, views, loading, setActiveId, saveActiveConfig, markNotificationRead, pushNotification, clearNotifications, createView, deleteView, reorderViews, renameView }}
         >
             {children}
         </ProjectContext.Provider>

@@ -5,8 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AdcsConfig, DEFAULT_ADCS_CONFIG } from "@/lib/projects";
 import { useProject } from "@/components/project-context";
-import { CaseUpper, Check, Crosshair, Expand, FastForward, Lock, Play, RotateCcw, Settings, SkipBack, SkipForward, SlidersHorizontal, X } from "lucide-react";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { CaseUpper, Check, Crosshair, Download, Expand, Lock, Pause, Play, RotateCcw, Settings, SkipBack, SkipForward, SlidersHorizontal, TriangleAlert, X } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Canvas, extend, useFrame, useThree } from '@react-three/fiber';
@@ -16,6 +16,12 @@ import * as earcut from 'earcut';
 import * as THREE from 'three';
 import { StatField } from "../stat-field";
 import { Slider } from "../ui/slider";
+import { Textarea } from "../ui/textarea";
+import { Spinner } from "../ui/spinner";
+import { bStore } from "@/hooks/useAppStore";
+import { parseTle, propagateState, periodMinutes, groundTrack, type OrbitState } from "@/lib/orbit";
+import type { SatRec } from "satellite.js";
+import type { ScalarChannelSample } from "@/types/scalar";
 
 
 const velAz = 0.1;  // rad/s
@@ -26,6 +32,9 @@ const targetEl = Math.PI;
 
 const R_EARTH = 6.300;
 const satHeight = 0.550;
+const EARTH_RADIUS_KM = 6371;
+const KM_TO_UNITS = R_EARTH / EARTH_RADIUS_KM;
+const AXIS_X = new THREE.Vector3(1, 0, 0);
 
 function circularBound(value: number, target: number, tolerance: number) {
     return (value - target + Math.PI) % (2*Math.PI) - Math.PI;
@@ -164,29 +173,6 @@ function Cube(props: {
 
     useFrame((state, delta) => {
         if (cubeRef.current) {
-            const cx: number = cubeRef.current.rotation.x;
-            const cy: number = cubeRef.current.rotation.y;
-
-            // cubeRef.current.rotation.x += 0.01;
-            if (cy > 2*Math.PI) {
-                cubeRef.current.rotation.y = cy % (2*Math.PI);
-            } else {
-                cubeRef.current.rotation.y = (cy + velEl * delta);
-            }
-
-            if (cx > 2*Math.PI) {
-                cubeRef.current.rotation.x = cx % (2*Math.PI);
-            } else {
-                cubeRef.current.rotation.x = (cx + velAz * delta);
-            }
-
-            // if (circularBound(cx, targetAz, 0.1) && circularBound(cy, targetEl, 0.1)) {
-            //     setHeadingColor("green");
-            //     console.log("GREEN");
-            // } else {
-            //     setHeadingColor("white");
-            // }
-
             if (labelRef.current) {
                 const distance = camera.position.distanceTo(labelRef.current.getWorldPosition(new THREE.Vector3()));
 
@@ -535,7 +521,7 @@ const GROUND_STATIONS = [
     { label: "GS-2", lon: -90.1994, lat: 38.627 }, // St. Louis, MO
 ];
 
-function Earth(props: { radius?: number; rotate?: boolean; stations?: boolean }) {
+function Earth(props: { radius?: number; rotate?: boolean; stations?: boolean; atmosphere?: boolean; children?: React.ReactNode }) {
     const radius = props.radius ?? R_EARTH;
     const spin = props.rotate ?? true;
     const groupRef = useRef<THREE.Group>(null);
@@ -567,23 +553,25 @@ function Earth(props: { radius?: number; rotate?: boolean; stations?: boolean })
                 />
             </mesh>
 
-            {/* Ground-station pins (track geography as the globe spins) */}
             {props.stations &&
                 GROUND_STATIONS.map((s) => (
                     <GroundStationPin key={s.label} {...s} occludeRef={globeRef} />
                 ))}
 
-            {/* Soft atmospheric rim */}
-            <mesh scale={1.02}>
-                <sphereGeometry args={[radius, 48, 48]} />
-                <meshBasicMaterial
-                    color="#8ec5ff"
-                    transparent
-                    opacity={0.12}
-                    side={THREE.BackSide}
-                    depthWrite={false}
-                />
-            </mesh>
+            {props.children}
+
+            {(props.atmosphere ?? true) && (
+                <mesh scale={1.02}>
+                    <sphereGeometry args={[radius, 48, 48]} />
+                    <meshBasicMaterial
+                        color="#8ec5ff"
+                        transparent
+                        opacity={0.12}
+                        side={THREE.BackSide}
+                        depthWrite={false}
+                    />
+                </mesh>
+            )}
         </group>
     );
 }
@@ -669,67 +657,51 @@ function CubeSat(props: { scale?: number }) {
     );
 }
 
-// Drives a CubeSat around a circular orbit and draws the ground track ring.
-// The orbit plane is built to pass directly over the WUSAT ground station
-// (GS-2, St. Louis): an orthonormal basis {site, north} spans a polar track
-// through the site's meridian. The whole orbit co-rotates with the globe (same
-// rate as Earth's spin) so the track stays locked over WUSAT.
-function SatelliteOrbit(props: { radius: number }) {
-    const groupRef = useRef<THREE.Group>(null);
+function parseQuat(text?: string | null): THREE.Quaternion | null {
+    if (!text) return null;
+    const p = text.split(/[,\s]+/).map(Number).filter((n) => Number.isFinite(n));
+    if (p.length !== 4) return null;
+    const [a, b, c, d] = p;
+    return new THREE.Quaternion(b, c, d, a).normalize();
+}
+
+function geoToUnits(lat: number, lon: number, altKm: number) {
+    return latLonToSpherePos(lon, lat, R_EARTH + altKm * KM_TO_UNITS);
+}
+
+function Sgp4Satellite(props: { satrec: SatRec; simTimeRef: { current: number }; quatText?: string | null }) {
     const satRef = useRef<THREE.Group>(null);
-    const r = props.radius;
 
-    const { site, north } = useMemo(() => {
-        const gs = GROUND_STATIONS[0]; // WUSAT / St. Louis
-        const site = latLonToSpherePos(gs.lon, gs.lat, 1).normalize();
-        // North tangent: the part of the world up-axis perpendicular to `site`.
-        const north = new THREE.Vector3(0, 1, 0)
-            .addScaledVector(site, -new THREE.Vector3(0, 1, 0).dot(site))
-            .normalize();
-        return { site, north };
-    }, []);
-
-    const ringPoints = useMemo(() => {
-        const pts: THREE.Vector3[] = [];
-        for (let i = 0; i <= 160; i++) {
-            const t = (i / 160) * Math.PI * 2;
-            pts.push(
-                new THREE.Vector3()
-                    .addScaledVector(site, r * Math.cos(t))
-                    .addScaledVector(north, r * Math.sin(t))
-            );
-        }
-        return pts;
-    }, [site, north, r]);
-
-    useFrame((state, delta) => {
-        // Co-rotate with the globe so the ground track stays over WUSAT.
-        if (groupRef.current) groupRef.current.rotation.y += 0.03 * delta;
-
-        const theta = state.clock.getElapsedTime() * 0.3; // rad/s along-track
-        if (satRef.current) {
-            satRef.current.position
-                .copy(site)
-                .multiplyScalar(r * Math.cos(theta))
-                .addScaledVector(north, r * Math.sin(theta));
-            // Point the bus's long axis (+X) along the velocity vector.
-            const vel = north
-                .clone()
-                .multiplyScalar(Math.cos(theta))
-                .addScaledVector(site, -Math.sin(theta))
-                .normalize();
-            satRef.current.quaternion.setFromUnitVectors(new THREE.Vector3(1, 0, 0), vel);
+    useFrame(() => {
+        const g = satRef.current;
+        if (!g) return;
+        const now = new Date(props.simTimeRef.current);
+        const s = propagateState(props.satrec, now);
+        if (!s) return;
+        const pos = geoToUnits(s.lat, s.lon, s.altKm);
+        g.position.copy(pos);
+        const q = parseQuat(props.quatText);
+        if (q) {
+            g.quaternion.copy(q);
+        } else {
+            const ahead = propagateState(props.satrec, new Date(now.getTime() + 4000));
+            if (ahead) {
+                const dir = geoToUnits(ahead.lat, ahead.lon, ahead.altKm).sub(pos);
+                if (dir.lengthSq() > 1e-9) g.quaternion.setFromUnitVectors(AXIS_X, dir.normalize());
+            }
         }
     });
 
     return (
-        <group ref={groupRef}>
-            <Line points={ringPoints} color="white" lineWidth={1.5} transparent opacity={0.45} />
-            <group ref={satRef}>
-                <CubeSat scale={1.2} />
-            </group>
+        <group ref={satRef}>
+            <CubeSat scale={1.1} />
         </group>
     );
+}
+
+function OrbitTrack(props: { points: THREE.Vector3[] }) {
+    if (props.points.length < 2) return null;
+    return <Line points={props.points} color="#8ec5ff" lineWidth={1.5} transparent opacity={0.5} />;
 }
 
 function OrbitalScene() {
@@ -780,28 +752,20 @@ enum Controls {
     right = 'right'
 }
 
-function ThreeScene() {
+function ThreeScene(props: {
+    satrec: SatRec | null;
+    simTimeRef: { current: number };
+    trackPoints: THREE.Vector3[];
+    quatText?: string | null;
+    showOrbit: boolean;
+    showStation: boolean;
+    showAtmosphere: boolean;
+    autoRotate: boolean;
+}) {
     const controlsRef = useRef<any>(null);
-
-    // const fwd = useKeyboardControls((state) => state.forward);
-    // const bwd = useKeyboardControls((state) => state.backward);
-    // const left = useKeyboardControls((state) => state.left);
-    // const right = useKeyboardControls((state) => state.right);
-
-    // useFrame(() => {
-    //     if (controlsRef.current) {
-    //         const speed = 0.1;
-
-    //         if (fwd) {
-    //             camera.
-    //         }
-    //     }
-    // })
-
     const { scene } = useThree();
 
     useEffect(() => {
-        // set sky background using https://opengameart.org/content/night-sky-skybox-generator
         const loader = new THREE.CubeTextureLoader();
         const texture = loader.load([
             "/xpos.png",
@@ -818,19 +782,16 @@ function ThreeScene() {
         <>
             <ambientLight intensity={0.5}/>
             <directionalLight position={[10, 10, 10]} intensity={1.4} castShadow />
-            {/* <PlanetThing /> */}
-            {/* <Planet /> */}
-            <Earth stations />
-            <SatelliteOrbit radius={R_EARTH + satHeight} />
-            {/* <Stats /> */}
-            {/* <OrbitalPath /> */}
-            {/* <FragAntennaPattern /> */}
-            {/* <OrbitalLabel /> */}
+            <Earth stations={props.showStation} rotate={props.autoRotate} atmosphere={props.showAtmosphere}>
+                {props.showOrbit && <OrbitTrack points={props.trackPoints} />}
+                {props.satrec && (
+                    <Sgp4Satellite satrec={props.satrec} simTimeRef={props.simTimeRef} quatText={props.quatText} />
+                )}
+            </Earth>
             <OrbitControls
                 ref={controlsRef}
                 maxDistance={3 * R_EARTH}
                 minDistance={1.1 * R_EARTH}
-                /* target={[6850, 0, 0]} */ 
                 panSpeed={0.6}
                 zoomSpeed={0.1}
                 zoom0={R_EARTH}
@@ -944,18 +905,53 @@ const modelButtons: ModelButtonProps[] = [
     }
 ]
 
-function PlaybackControls() {
+const SIM_WINDOW_MIN = 24 * 60;
+
+function formatUtc(d: Date) {
+    return d.toISOString().replace("T", " ").slice(0, 19) + " UTC";
+}
+
+function formatOffset(min: number) {
+    const total = Math.round(min * 60);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    return `T+${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function PlaybackControls(props: {
+    offsetMin: number;
+    playing: boolean;
+    simDate: Date;
+    disabled?: boolean;
+    onScrub: (min: number) => void;
+    onToggle: () => void;
+    onSkipStart: () => void;
+    onSkipEnd: () => void;
+}) {
     return (
-        <div className="flex flex-col items-center gap-4">
-            <Slider className="w-[24rem]"/>
+        <div className="flex flex-col items-center gap-3 bg-black/50 backdrop-blur-xl border rounded-xl px-5 py-3">
+            <div className="flex flex-row items-baseline gap-3 font-mono text-sm">
+                <span className="text-foreground">{formatUtc(props.simDate)}</span>
+                <span className="text-xs text-muted-foreground">{formatOffset(props.offsetMin)}</span>
+            </div>
+            <Slider
+                className="w-[24rem]"
+                min={0}
+                max={SIM_WINDOW_MIN}
+                step={1}
+                value={[props.offsetMin]}
+                onValueChange={([v]) => props.onScrub(v)}
+                disabled={props.disabled}
+            />
             <div className="flex flex-row items-center gap-2">
-                <Button variant="outline" className="backdrop-blur-md">
+                <Button variant="outline" className="backdrop-blur-md" onClick={props.onSkipStart} disabled={props.disabled}>
                     <SkipBack />
                 </Button>
-                <Button variant="outline" className="backdrop-blur-md">
-                    <Play />
+                <Button variant="outline" className="backdrop-blur-md" onClick={props.onToggle} disabled={props.disabled}>
+                    {props.playing ? <Pause /> : <Play />}
                 </Button>
-                <Button variant="outline" className="backdrop-blur-md">
+                <Button variant="outline" className="backdrop-blur-md" onClick={props.onSkipEnd} disabled={props.disabled}>
                     <SkipForward />
                 </Button>
             </div>
@@ -1002,6 +998,32 @@ function AdcsConfigModal(props: { initialConfig: AdcsConfig; onCancel: () => voi
     const [cfg, setCfg] = useState<AdcsConfig>({ ...DEFAULT_ADCS_CONFIG, ...props.initialConfig });
     const set = <K extends keyof AdcsConfig>(k: K, v: AdcsConfig[K]) =>
         setCfg((c) => ({ ...c, [k]: v }));
+
+    const [fetching, setFetching] = useState(false);
+    const [fetchErr, setFetchErr] = useState<string | null>(null);
+
+    const fetchTle = async () => {
+        const id = (cfg.noradId || "").replace(/\D/g, "");
+        if (!id) { setFetchErr("Enter a NORAD ID first"); return; }
+        setFetching(true);
+        setFetchErr(null);
+        try {
+            const res = await fetch(`/api/tle/${id}`);
+            const data = await res.json();
+            if (!res.ok) { setFetchErr(data?.error || "Fetch failed"); setFetching(false); return; }
+            setCfg((c) => ({ ...c, tleName: data.name, tleLine1: data.line1, tleLine2: data.line2 }));
+        } catch {
+            setFetchErr("Network error reaching Celestrak");
+        }
+        setFetching(false);
+    };
+
+    const channelFields: [keyof AdcsConfig, string, string][] = [
+        ["chMode", "Mode", "adcs.mode"],
+        ["chAngularRate", "Angular rate", "adcs.angularRate"],
+        ["chCurrent", "Bus current", "eps.current"],
+        ["chQuaternion", "Attitude quaternion (w,x,y,z)", "adcs.quaternion"],
+    ];
 
     const toggles: [keyof AdcsConfig, string][] = [
         ["showOrbit", "Orbit track"],
@@ -1076,6 +1098,45 @@ function AdcsConfigModal(props: { initialConfig: AdcsConfig; onCancel: () => voi
                         </div>
                     </ConfigSection>
 
+                    <ConfigSection title="Tracking (SGP4)">
+                        <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="cfg-norad">NORAD Catalog ID</Label>
+                            <div className="flex flex-row gap-2">
+                                <Input
+                                    id="cfg-norad"
+                                    inputMode="numeric"
+                                    placeholder="e.g. 25544"
+                                    value={cfg.noradId}
+                                    onChange={(e) => set("noradId", e.target.value.replace(/\D/g, ""))}
+                                />
+                                <Button type="button" variant="secondary" onClick={fetchTle} disabled={fetching}>
+                                    {fetching ? <Spinner className="w-4 h-4" /> : <Download className="w-4 h-4" />}
+                                    Fetch TLE
+                                </Button>
+                            </div>
+                            {fetchErr && <p className="text-xs text-red-500">{fetchErr}</p>}
+                            {cfg.tleName && !fetchErr && (
+                                <p className="text-xs text-muted-foreground">Loaded: <span className="font-mono">{cfg.tleName}</span></p>
+                            )}
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="cfg-tle">Two-line element set</Label>
+                            <Textarea
+                                id="cfg-tle"
+                                rows={2}
+                                spellCheck={false}
+                                className="font-mono text-xs"
+                                placeholder={"1 25544U ...\n2 25544 ..."}
+                                value={[cfg.tleLine1, cfg.tleLine2].filter(Boolean).join("\n")}
+                                onChange={(e) => {
+                                    const [l1 = "", l2 = ""] = e.target.value.split(/\r?\n/);
+                                    setCfg((c) => ({ ...c, tleLine1: l1, tleLine2: l2 }));
+                                }}
+                            />
+                            <p className="text-xs text-muted-foreground">Fetched by NORAD ID, or paste a TLE manually. Manual entry takes priority.</p>
+                        </div>
+                    </ConfigSection>
+
                     <ConfigSection title="Display">
                         {toggles.map(([k, label]) => (
                             <label key={k} className="flex flex-row items-center gap-2 cursor-pointer">
@@ -1105,6 +1166,22 @@ function AdcsConfigModal(props: { initialConfig: AdcsConfig; onCancel: () => voi
                                 { value: "playback", label: "Playback" },
                             ]}
                         />
+                    </ConfigSection>
+
+                    <ConfigSection title="Flight Data Channels">
+                        <p className="text-xs text-muted-foreground -mt-1">Map each readout to a SCALAR channel name. Empty shows “--”.</p>
+                        {channelFields.map(([k, label, placeholder]) => (
+                            <div key={k} className="grid grid-cols-[9rem_1fr] items-center gap-3">
+                                <Label htmlFor={`cfg-${k}`} className="text-xs">{label}</Label>
+                                <Input
+                                    id={`cfg-${k}`}
+                                    className="font-mono text-xs"
+                                    placeholder={placeholder}
+                                    value={cfg[k] as string}
+                                    onChange={(e) => set(k, e.target.value as never)}
+                                />
+                            </div>
+                        ))}
                     </ConfigSection>
                 </div>
 
@@ -1150,9 +1227,125 @@ function AdcsConfigOverlay(props: { projectName: string; initialConfig: AdcsConf
     );
 }
 
+function useTle(config: AdcsConfig) {
+    const [state, setState] = useState<{ satrec: SatRec | null; name: string; status: "idle" | "loading" | "ready" | "error"; error: string | null }>({
+        satrec: null,
+        name: "",
+        status: "idle",
+        error: null,
+    });
+
+    const load = useCallback(async () => {
+        const manual = parseTle(config.tleLine1, config.tleLine2);
+        if (manual) {
+            setState({ satrec: manual, name: config.tleName || "Manual TLE", status: "ready", error: null });
+            return;
+        }
+        const id = (config.noradId || "").replace(/\D/g, "");
+        if (!id) {
+            setState({ satrec: null, name: "", status: "idle", error: null });
+            return;
+        }
+        setState((s) => ({ ...s, status: "loading", error: null }));
+        try {
+            const res = await fetch(`/api/tle/${id}`);
+            const data = await res.json();
+            if (!res.ok) {
+                setState({ satrec: null, name: "", status: "error", error: data?.error || "Failed to fetch TLE" });
+                return;
+            }
+            const rec = parseTle(data.line1, data.line2);
+            if (!rec) {
+                setState({ satrec: null, name: "", status: "error", error: "Invalid TLE returned" });
+                return;
+            }
+            setState({ satrec: rec, name: data.name || `NORAD ${id}`, status: "ready", error: null });
+        } catch {
+            setState({ satrec: null, name: "", status: "error", error: "Network error fetching TLE" });
+        }
+    }, [config.tleLine1, config.tleLine2, config.tleName, config.noradId]);
+
+    useEffect(() => { load(); }, [load]);
+
+    return state;
+}
+
+function fmtChannel(s: ScalarChannelSample | undefined): string {
+    if (!s || s.value == null) return "--";
+    if (typeof s.value === "number") return Number.isInteger(s.value) ? String(s.value) : s.value.toFixed(2);
+    return String(s.value);
+}
+
 function SceneWrapper() {
     const { activeProject, saveActiveConfig } = useProject();
     const configured = activeProject?.configured ?? false;
+    const config = useMemo(() => ({ ...DEFAULT_ADCS_CONFIG, ...(activeProject?.config ?? {}) }), [activeProject?.config]);
+    const live = config.live;
+
+    const channels = bStore.use.scalarChannels();
+    const { satrec, name: tleName, status: tleStatus, error: tleError } = useTle(config);
+
+    const [configOpen, setConfigOpen] = useState(false);
+
+    const epochRef = useRef<number>(Date.now());
+    const simTimeRef = useRef<number>(epochRef.current);
+    const offsetRef = useRef<number>(0);
+    const [offsetMin, setOffsetMin] = useState(0);
+    const [playing, setPlaying] = useState(false);
+
+    const simDate = useMemo(() => new Date(epochRef.current + offsetMin * 60000), [offsetMin]);
+
+    const setOffset = useCallback((min: number) => {
+        const clamped = Math.max(0, Math.min(SIM_WINDOW_MIN, min));
+        offsetRef.current = clamped;
+        simTimeRef.current = epochRef.current + clamped * 60000;
+        setOffsetMin(clamped);
+    }, []);
+
+    useEffect(() => {
+        if (!playing) return;
+        const RATE = SIM_WINDOW_MIN / 60;
+        let raf = 0;
+        let last = performance.now();
+        const tick = (t: number) => {
+            const dt = (t - last) / 1000;
+            last = t;
+            const next = Math.min(SIM_WINDOW_MIN, offsetRef.current + RATE * dt);
+            offsetRef.current = next;
+            simTimeRef.current = epochRef.current + next * 60000;
+            setOffsetMin(next);
+            if (next >= SIM_WINDOW_MIN) {
+                setPlaying(false);
+                return;
+            }
+            raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf);
+    }, [playing]);
+
+    const toggle = () => {
+        if (offsetRef.current >= SIM_WINDOW_MIN) setOffset(0);
+        setPlaying((p) => !p);
+    };
+    const skipStart = () => { setPlaying(false); setOffset(0); };
+    const skipEnd = () => { setPlaying(false); setOffset(SIM_WINDOW_MIN); };
+    const scrub = (min: number) => { setPlaying(false); setOffset(min); };
+
+    const trackKey = Math.floor(offsetMin / 15);
+    const trackPoints = useMemo(() => {
+        if (!satrec) return [] as THREE.Vector3[];
+        const from = new Date(epochRef.current + trackKey * 15 * 60000);
+        const per = periodMinutes(satrec) || 95;
+        return groundTrack(satrec, from, per, 160).map((p) => geoToUnits(p.lat, p.lon, p.altKm));
+    }, [satrec, trackKey]);
+
+    const orbit: OrbitState | null = useMemo(
+        () => (satrec ? propagateState(satrec, simDate) : null),
+        [satrec, simDate]
+    );
+
+    const quatText = config.chQuaternion ? channels[config.chQuaternion]?.text ?? null : null;
 
     const map = useMemo<KeyboardControlsEntry<Controls>[]>(
         () => [
@@ -1167,36 +1360,90 @@ function SceneWrapper() {
         <div id="canvas-container" className="flex-1 relative dark">
             <KeyboardControls map={map}>
                 <Canvas shadows camera={{ position: [2.2 * R_EARTH, 0, 0], near: 0.1, far: R_EARTH * 3 }}>
-                    <ThreeScene />
+                    <ThreeScene
+                        satrec={satrec}
+                        simTimeRef={simTimeRef}
+                        trackPoints={trackPoints}
+                        quatText={quatText}
+                        showOrbit={config.showOrbit}
+                        showStation={config.showStation}
+                        showAtmosphere={config.showAtmosphere}
+                        autoRotate={config.autoRotate}
+                    />
                 </Canvas>
             </KeyboardControls>
+
+            {!live && (
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 mt-4">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <div className="flex flex-row items-center gap-2 rounded-full border border-red-500/50 bg-red-950/60 backdrop-blur-xl px-3 py-1.5 text-red-400">
+                                <TriangleAlert className="w-4 h-4" />
+                                <span className="text-xs font-semibold uppercase tracking-wide">Not Live</span>
+                            </div>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                            Spacecraft is not live — showing predicted SGP4 orbit only.
+                        </TooltipContent>
+                    </Tooltip>
+                </div>
+            )}
+
             <div className="absolute top-0 right-0">
-                <div className="bg-black/50 backdrop-blur-xl p-4 m-4 rounded-md border">
-                    <h1 className="pb-2 -mt-1 font-semibold text-sm">Control Parameters</h1>
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-2">
-                        <StatField small title="Mode" value="ACTIVE"/>
-                        <StatField small title="Active Current" value="3.21" units="A"/>
-                        <StatField small title="Ang Velocity" value="5.24" units="°/min"/>
-                        <StatField small title="Ang Acc" value="0.54" units="°/min"/>
+                <div className="bg-black/50 backdrop-blur-xl p-4 m-4 rounded-md border w-64">
+                    <div className="flex flex-row items-center justify-between pb-2 -mt-1">
+                        <h1 className="font-semibold text-sm">Control Parameters</h1>
+                        <button
+                            onClick={() => setConfigOpen(true)}
+                            className="p-1 -m-1 rounded text-muted-foreground hover:text-foreground cursor-pointer"
+                            aria-label="Configure ADCS"
+                        >
+                            <SlidersHorizontal className="w-4 h-4" />
+                        </button>
                     </div>
+                    <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+                        <StatField small title="Mode" value={live ? fmtChannel(channels[config.chMode]) : "--"} />
+                        <StatField small title="Bus Current" value={live ? fmtChannel(channels[config.chCurrent]) : "--"} units={live && channels[config.chCurrent] ? "A" : undefined} />
+                        <StatField small title="Ang Rate" value={live ? fmtChannel(channels[config.chAngularRate]) : "--"} units={live && channels[config.chAngularRate] ? "°/s" : undefined} />
+                        <StatField small title="Data" value={config.dataSource === "live" ? "LIVE" : "PLAYBACK"} />
+                    </div>
+                    <div className="h-px bg-border my-3" />
+                    <div className="flex flex-row items-center gap-2 pb-2">
+                        <h1 className="font-semibold text-sm">Orbit (SGP4)</h1>
+                        {tleStatus === "loading" && <Spinner className="w-3 h-3" />}
+                    </div>
+                    {tleStatus === "error" ? (
+                        <p className="text-xs text-red-400">{tleError}</p>
+                    ) : !satrec ? (
+                        <p className="text-xs text-muted-foreground">Set a NORAD ID or TLE in configuration.</p>
+                    ) : (
+                        <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+                            <StatField small title="Object" value={tleName || "--"} />
+                            <StatField small title="Altitude" value={orbit ? orbit.altKm.toFixed(0) : "--"} units="km" />
+                            <StatField small title="Latitude" value={orbit ? orbit.lat.toFixed(2) : "--"} units="°" />
+                            <StatField small title="Longitude" value={orbit ? orbit.lon.toFixed(2) : "--"} units="°" />
+                            <StatField small title="Speed" value={orbit ? orbit.speedKmS.toFixed(2) : "--"} units="km/s" />
+                            <StatField small title="Period" value={periodMinutes(satrec).toFixed(1)} units="min" />
+                        </div>
+                    )}
                 </div>
             </div>
+
             <div className="absolute bottom-0 left-0 m-4 flex flex-row items-center justify-center w-full">
                 <div className="shrink-0 relative">
-                    <PlaybackControls />
+                    <PlaybackControls
+                        offsetMin={offsetMin}
+                        playing={playing}
+                        simDate={simDate}
+                        disabled={!satrec}
+                        onScrub={scrub}
+                        onToggle={toggle}
+                        onSkipStart={skipStart}
+                        onSkipEnd={skipEnd}
+                    />
                 </div>
             </div>
-            <div className="absolute bottom-0 left-0 m-4 flex flex-row items-end">
-                <div className="shrink-0 bg-black/50 backdrop-blur-xl rounded-full border relative overflow-hidden">
-                    <OrbitalScene />
-                    {/* <div className="absolute bottom-5 w-full flex flex-row items-center justify-center">
-                        <h2 className="font-semibold text-xs text-center text-gray-200">Pointing View</h2>
-                    </div> */}
-                </div>
-                <ModelButtonRow
-                    buttons={modelButtons}
-                />
-            </div>
+
             <div className="absolute top-0 left-0 m-4 flex flex-row items-start">
                 <div className="shrink-0 bg-black/50 backdrop-blur-xl rounded-full border relative">
                     <PointingScene />
@@ -1208,6 +1455,15 @@ function SceneWrapper() {
                     buttons={modelButtons}
                 />
             </div>
+
+            {configOpen && (
+                <AdcsConfigModal
+                    initialConfig={config}
+                    onCancel={() => setConfigOpen(false)}
+                    onApply={(cfg) => { setConfigOpen(false); saveActiveConfig(cfg); }}
+                />
+            )}
+
             {!configured && (
                 <AdcsConfigOverlay
                     projectName={activeProject?.name ?? "The ADCS view"}

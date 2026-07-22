@@ -9,6 +9,7 @@ import { MessageEnvelope } from "@/gen/messages/transport/v1/transport_pb";
 import { buildEnvelope } from "@/lib/utils";
 import { CommandBadgeType } from "@/types/ui";
 import { CmdFormInternalMessage, cmdInternalMessage, CommandDetails, commandDetails } from "@/constants/commands";
+import { useSettings } from "@/lib/settings";
 
 
 const CommandBadge = (props: {
@@ -109,22 +110,32 @@ const CommandPrompt = (props: {
     search: string
 }) => {
     const _client = bStore.use.client();
+    const [settings] = useSettings();
 
     const [formMessage, setFormMessage] = useState<MessageEnvelope["messageBody"]["case"] | null>(null);
+    const [pending, setPending] = useState<{ values: any; cd: CommandDetails<z.ZodObject> } | null>(null);
 
     const searchLow = props.search.toLowerCase();
 
-    const onSubmitCommandForm = (values: any, cd: CommandDetails<z.ZodObject>) => {
+    const doSend = (values: any, cd: CommandDetails<z.ZodObject>) => {
         const message = cd.zodToMessage(values);
 
         const bytes = buildEnvelope("0", cd.messageEnvelopeId, message);
 
         if (!_client)
             return;
-        
+
         _client.send(bytes).catch(e => {
             console.log(e);
         });
+    }
+
+    const onSubmitCommandForm = (values: any, cd: CommandDetails<z.ZodObject>) => {
+        if (settings.confirmCommands) {
+            setPending({ values, cd });
+            return;
+        }
+        doSend(values, cd);
     }
     
     return (
@@ -190,6 +201,20 @@ const CommandPrompt = (props: {
                     </div>
                 </div>
             }
+
+            {pending && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/60" onClick={() => setPending(null)} />
+                    <div className="relative z-10 w-full max-w-sm rounded-lg border bg-background p-5 flex flex-col gap-4">
+                        <h3 className="font-semibold">Confirm command</h3>
+                        <p className="text-sm text-muted-foreground">Send this command to the spacecraft? This uplinks to the vehicle.</p>
+                        <div className="flex flex-row justify-end gap-2">
+                            <Button variant="ghost" onClick={() => setPending(null)}>Cancel</Button>
+                            <Button onClick={() => { doSend(pending.values, pending.cd); setPending(null); }}>Send command</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

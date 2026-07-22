@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { ArrowUp, Bell, CalendarDays, Check, ChevronDown, Command, Cross, Database, ExternalLink, LogOut, Moon, PanelRightClose, PanelRightOpen, PanelTopClose, Plus, Pyramid, RadioTower, RefreshCcw, Satellite, Settings, SidebarClose, SidebarOpen, SquareTerminal, Sun, Triangle, TriangleAlert, User, X } from "lucide-react";
+import { ArrowUp, Bell, CalendarDays, Check, ChevronDown, Command, Cross, Database, ExternalLink, LogOut, Moon, PanelRightClose, PanelRightOpen, PanelTopClose, PanelTopOpen, Plus, Pyramid, RadioTower, RefreshCcw, Satellite, Settings, SidebarClose, SidebarOpen, SquareTerminal, Sun, Triangle, TriangleAlert, User, X } from "lucide-react";
 import { ViewIcon } from "@/lib/view-icons";
 import { redirect, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -24,6 +24,7 @@ import CalendarView from "@/components/views/calendar-view";
 import { SidebarContent, SidebarFooter, SidebarGroup, SidebarHeader, SidebarProvider } from "@/components/ui/sidebar";
 import { ProjectProvider, useProject } from "@/components/project-context";
 import { useSettings } from "@/lib/settings";
+import { rememberView } from "@/lib/last-view";
 import { CustomDashboardView, MopsEditor } from "@/components/views/custom-dashboard-view";
 import { MoreVertical, Pencil, Trash2 } from "lucide-react";
 
@@ -208,22 +209,40 @@ function UserTileMinimal() {
 }
 
 function ViewHeader(props: {
-    title: string
+    title: string,
+    viewKey?: string,
+    children?: ReactNode
 }) {
+    const [collapsed, setCollapsed] = useState(false);
+
+    const popout = () => {
+        if (props.viewKey) window.open(`/dashboard/${props.viewKey}`, "_blank", "noopener,noreferrer");
+    };
+
     return (
-        <div className="sticky top-0 z-10 bg-background/60 backdrop-blur-sm flex flex-row items-center justify-between px-4 py-2 border-b">
-            <h2 className="font-semibold text-base">{props.title}</h2>
-            <div className="flex flex-row items-center">
-                <Button variant="ghost">
-                    <PanelTopClose className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost">
-                    <ExternalLink className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost">
-                    <Settings className="w-4 h-4" />
-                </Button>
+        <div className="flex flex-col h-full min-h-0">
+            <div className="sticky top-0 z-10 bg-background/60 backdrop-blur-sm flex flex-row items-center justify-between px-4 py-2 border-b">
+                <h2 className="font-semibold text-base">{props.title}</h2>
+                <div className="flex flex-row items-center">
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost" onClick={() => setCollapsed((c) => !c)}>
+                                {collapsed ? <PanelTopOpen className="w-4 h-4" /> : <PanelTopClose className="w-4 h-4" />}
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>{collapsed ? "Expand panel" : "Collapse panel"}</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Button variant="ghost" onClick={popout} disabled={!props.viewKey}>
+                                <ExternalLink className="w-4 h-4" />
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Open in new tab</TooltipContent>
+                    </Tooltip>
+                </div>
             </div>
+            {!collapsed && props.children}
         </div>
     )
 }
@@ -271,12 +290,11 @@ function ViewContent(props: {
         case "command":
             return (
                 <SingleViewWrapper>
-                    <div className="h-full flex flex-col">
-                        <ViewHeader title="Command and Control"/>
+                    <ViewHeader title="Command and Control" viewKey="command">
                         <div className="flex-1 p-4">
                             <CommandView />
                         </div>
-                    </div>
+                    </ViewHeader>
                 </SingleViewWrapper>
             );
         case "adcs":
@@ -296,10 +314,11 @@ function ViewContent(props: {
                         defaultSize={50}
                         style={{ overflow: "scroll" }}
                     >
-                        <ViewHeader title="Data View"/>
-                        <div className="p-4 h-full pt-2">
-                            <DataView />
-                        </div>
+                        <ViewHeader title="Data View" viewKey="cdh">
+                            <div className="p-4 h-full pt-2">
+                                <DataView />
+                            </div>
+                        </ViewHeader>
                     </ResizablePanel>
                     <ResizableHandle
                         className="hover:bg-blue-500"
@@ -308,42 +327,42 @@ function ViewContent(props: {
                         defaultSize={50}
                         style={{ overflow: "scroll" }}
                     >
-                        <ViewHeader title="Command View"/>
-                        <div className="p-4 h-full pt-2">
-                            <CommandView />
-                        </div>
+                        <ViewHeader title="Command View" viewKey="cdh">
+                            <div className="p-4 h-full pt-2">
+                                <CommandView />
+                            </div>
+                        </ViewHeader>
                     </ResizablePanel>
                 </ResizablePanelGroup>
             );
         case "data":
             return (
                 <div className="relative h-full">
-                    <ViewHeader title="Data View"/>
-                    <div className="flex-1 flex flex-col p-4">
-                        <DataView />
-                    </div>
+                    <ViewHeader title="Data View" viewKey="data">
+                        <div className="flex-1 flex flex-col p-4">
+                            <DataView />
+                        </div>
+                    </ViewHeader>
                 </div>
             );
         case "scalar":
             return (
                 <SingleViewWrapper>
-                    <div className="h-full flex flex-col">
-                        <ViewHeader title="SCALAR Telemetry"/>
+                    <ViewHeader title="SCALAR Telemetry" viewKey="scalar">
                         <div className="flex-1 p-4 min-h-0">
                             <ScalarTelemetryView />
                         </div>
-                    </div>
+                    </ViewHeader>
                 </SingleViewWrapper>
             );
         case "calendar":
             return (
                 <SingleViewWrapper>
-                    <div className="h-full flex flex-col">
-                        <ViewHeader title="Mission Calendar"/>
+                    <ViewHeader title="Mission Calendar" viewKey="calendar">
                         <div className="flex-1 p-4 min-h-0">
                             <CalendarView />
                         </div>
-                    </div>
+                    </ViewHeader>
                 </SingleViewWrapper>
             );
         default:
@@ -396,36 +415,32 @@ function ModeTrigger({ live }: { live: boolean }) {
                     <DropdownMenuLabel>
                         Orbital Passes
                     </DropdownMenuLabel>
-                    <DropdownMenuCheckboxItem>
-                        Pass #123
-                        <span className="bg-muted rounded-md px-2 py-1 -my-1">10/23/25</span>
-                        12:23:12 CST
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem>
-                        Pass #122
-                        <span className="bg-muted rounded-md px-2 py-1 -my-1">10/23/25</span>
-                        12:23:12 CST
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem>
-                        Pass #121
-                        <span className="bg-muted rounded-md px-2 py-1 -my-1">10/23/25</span>
-                        12:23:12 CST
-                    </DropdownMenuCheckboxItem>
-                    <DropdownMenuCheckboxItem>
-                        Pass #120
-                        <span className="bg-muted rounded-md px-2 py-1 -my-1">10/23/25</span>
-                        12:23:12 CST
-                    </DropdownMenuCheckboxItem>
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
-                    <DropdownMenuItem>
-                        See all
-                    </DropdownMenuItem>
+                    <div className="flex flex-row items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground">
+                        <span className="w-2 h-2 rounded-full bg-muted-foreground/50" />
+                        No pass data — offline
+                    </div>
                 </DropdownMenuGroup>
             </DropdownMenuContent>
         </DropdownMenu>
     )
+}
+
+function playNotificationSound() {
+    try {
+        const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const ctx = new Ctx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.06, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.26);
+        osc.onended = () => ctx.close();
+    } catch {}
 }
 
 function Heading() {
@@ -443,6 +458,24 @@ function Heading() {
               ? settings.notifyWarning
               : settings.notifyInfo
     );
+
+    const seenNotifications = useRef<Set<number> | null>(null);
+    useEffect(() => {
+        if (seenNotifications.current === null) {
+            seenNotifications.current = new Set(notifications.map((n) => n.id));
+            return;
+        }
+        const fresh = notifications.filter((n) => !seenNotifications.current!.has(n.id));
+        for (const n of fresh) seenNotifications.current!.add(n.id);
+        const relevant = fresh.filter((n) =>
+            n.level === "critical" ? true : n.level === "warning" ? settings.notifyWarning : settings.notifyInfo
+        );
+        if (relevant.length === 0) return;
+        if (settings.desktopNotifications && typeof Notification !== "undefined" && Notification.permission === "granted") {
+            for (const n of relevant) new Notification(n.title, { body: n.message ?? undefined });
+        }
+        if (settings.notificationSound) playNotificationSound();
+    }, [notifications, settings.desktopNotifications, settings.notificationSound, settings.notifyWarning, settings.notifyInfo]);
 
     return (
         <div className="sticky top-0 z-50">
@@ -822,6 +855,10 @@ export default function DashboardView({ params }: {
             setView(p.view);
         });
     }, []);
+
+    useEffect(() => {
+        if (view) rememberView(view);
+    }, [view]);
 
     return view ? (
         <ProjectProvider>

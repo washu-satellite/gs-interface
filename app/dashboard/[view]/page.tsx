@@ -11,7 +11,8 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGro
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ArrowUp, Bell, CalendarDays, Check, ChevronDown, Command, Cross, Database, ExternalLink, GamepadDirectional, LogOut, Moon, PanelRightClose, PanelRightOpen, PanelTopClose, Plus, Pyramid, RadioTower, RefreshCcw, Satellite, Settings, SidebarClose, SidebarOpen, SquareTerminal, Sun, Triangle, TriangleAlert, User, X } from "lucide-react";
 import { redirect, useRouter } from "next/navigation";
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
+import { Input } from "@/components/ui/input";
 import ControlsView from "@/components/views/controls-view";
 import { Spinner } from "@/components/ui/spinner";
 import { StatField } from "@/components/stat-field";
@@ -21,6 +22,8 @@ import ScalarTelemetryView from "@/components/views/scalar-telemetry-view";
 import CalendarView from "@/components/views/calendar-view";
 import { SidebarContent, SidebarFooter, SidebarGroup, SidebarHeader, SidebarProvider } from "@/components/ui/sidebar";
 import { ProjectProvider, useProject } from "@/components/project-context";
+import { CustomDashboardView, MopsEditor } from "@/components/views/custom-dashboard-view";
+import { ChevronUp, MoreVertical, Pencil, Trash2 } from "lucide-react";
 
 type NavTileType = {
     icon: ReactNode,
@@ -42,11 +45,6 @@ const navElms: NavTileType[] = [
         title: "ADCS",
         description: "Model-based controls dashboard",
         id: "adcs"
-    },
-    {
-        icon: <GamepadDirectional className="w-4"/>,
-        title: "MOPS 1",
-        id: "mops-1"
     },
     {
         icon: <SquareTerminal className="w-4"/>,
@@ -244,8 +242,29 @@ function SingleViewWrapper(props: React.PropsWithChildren<{}>) {
 }
 
 function ViewContent(props: {
-    view: string
+    view: string,
+    setView: (v: string) => void
 }) {
+    const { views, deleteView, activeProject } = useProject();
+
+    if (props.view.startsWith("custom-")) {
+        const id = Number(props.view.slice("custom-".length));
+        const cv = views.find((v) => v.id === id);
+        if (!cv) return <h1 className="text-center pt-8 text-muted-foreground">View not found</h1>;
+        return (
+            <SingleViewWrapper>
+                <CustomDashboardView
+                    view={cv}
+                    live={!!activeProject?.config?.live}
+                    onDelete={() => {
+                        deleteView(cv.id);
+                        props.setView("adcs");
+                    }}
+                />
+            </SingleViewWrapper>
+        );
+    }
+
     switch (props.view) {
         case "command":
             return (
@@ -529,11 +548,134 @@ function Heading() {
     );
 }
 
+type NavItem = { key: string; title: string; icon: ReactNode; custom: boolean; viewId?: number };
+
+function NavRow(props: {
+    item: NavItem,
+    index: number,
+    total: number,
+    view: string,
+    minimized: boolean,
+    dragging: boolean,
+    over: boolean,
+    onSelect: () => void,
+    onDragStart: () => void,
+    onDragOver: (e: React.DragEvent) => void,
+    onDrop: () => void,
+    onDragEnd: () => void,
+    onMove: (dir: -1 | 1) => void,
+    onRename: () => void,
+    onDelete: () => void,
+}) {
+    const it = props.item;
+    return (
+        <div
+            draggable
+            onDragStart={props.onDragStart}
+            onDragOver={props.onDragOver}
+            onDrop={props.onDrop}
+            onDragEnd={props.onDragEnd}
+            className={cn(
+                "group relative",
+                props.dragging && "opacity-40",
+                props.over && "ring-2 ring-blue-500/60 rounded-sm"
+            )}
+        >
+            <NavTile
+                id={it.key}
+                title={it.title}
+                icon={it.icon}
+                selected={props.view === it.key}
+                onClick={props.onSelect}
+                minimized={props.minimized}
+            />
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <button
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute top-1 -right-1 p-0.5 rounded opacity-40 group-hover:opacity-100 text-muted-foreground hover:text-foreground hover:bg-secondary transition-opacity cursor-pointer"
+                    >
+                        <MoreVertical className="w-3.5 h-3.5" />
+                    </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="right" align="start">
+                    <DropdownMenuItem disabled={props.index === 0} onClick={() => props.onMove(-1)}>
+                        <ChevronUp className="w-4 h-4" /> Move up
+                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled={props.index === props.total - 1} onClick={() => props.onMove(1)}>
+                        <ChevronDown className="w-4 h-4" /> Move down
+                    </DropdownMenuItem>
+                    {it.custom && (
+                        <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={props.onRename}>
+                                <Pencil className="w-4 h-4" /> Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="text-red-500" onClick={props.onDelete}>
+                                <Trash2 className="w-4 h-4" /> Delete
+                            </DropdownMenuItem>
+                        </>
+                    )}
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </div>
+    );
+}
+
 function Sidebar(props: {
     view: string,
     setView: (v: string) => void
 }) {
     const [open, setOpen] = useState(true);
+    const [building, setBuilding] = useState(false);
+    const { views, activeId, createView, reorderViews, renameView, deleteView } = useProject();
+
+    const [order, setOrder] = useState<string[]>([]);
+    const [dragIdx, setDragIdx] = useState<number | null>(null);
+    const [overIdx, setOverIdx] = useState<number | null>(null);
+    const [renaming, setRenaming] = useState<{ id: number; name: string } | null>(null);
+
+    const items: NavItem[] = useMemo(() => [
+        ...navElms
+            .filter((n) => n.id !== "scalar" || activeId === "scalar")
+            .map((n) => ({ key: n.id, title: n.title, icon: n.icon, custom: false })),
+        ...views.map((v) => ({ key: `custom-${v.id}`, title: v.name, icon: <GamepadDirectional className="w-4" />, custom: true, viewId: v.id })),
+    ], [views, activeId]);
+
+    useEffect(() => {
+        const ids = items.map((i) => i.key);
+        let saved: string[] = [];
+        try { saved = JSON.parse(localStorage.getItem(`nav-order-${activeId}`) || "[]"); } catch {}
+        setOrder([...saved.filter((k) => ids.includes(k)), ...ids.filter((k) => !saved.includes(k))]);
+    }, [activeId, items]);
+
+    const persist = (next: string[]) => {
+        setOrder(next);
+        try { localStorage.setItem(`nav-order-${activeId}`, JSON.stringify(next)); } catch {}
+        const customIds = next.filter((k) => k.startsWith("custom-")).map((k) => Number(k.slice(7)));
+        if (customIds.length) reorderViews(customIds);
+    };
+
+    const move = (index: number, dir: -1 | 1) => {
+        const to = index + dir;
+        if (to < 0 || to >= order.length) return;
+        const next = [...order];
+        [next[index], next[to]] = [next[to], next[index]];
+        persist(next);
+    };
+
+    const onDrop = () => {
+        if (dragIdx !== null && overIdx !== null && dragIdx !== overIdx) {
+            const next = [...order];
+            const [moved] = next.splice(dragIdx, 1);
+            next.splice(overIdx, 0, moved);
+            persist(next);
+        }
+        setDragIdx(null);
+        setOverIdx(null);
+    };
+
+    const ordered = order.map((k) => items.find((i) => i.key === k)).filter(Boolean) as NavItem[];
 
     return (
         <div className="flex flex-col justify-between items-center">
@@ -543,26 +685,37 @@ function Sidebar(props: {
                     className="-mb-1 text-secondary-foreground/80"
                     onClick={() => setOpen(o => !o)}
                 >
-                    {open ? (
-                        <SidebarClose />
-                    ) : (
-                        <SidebarOpen />
-                    )}
+                    {open ? <SidebarClose /> : <SidebarOpen />}
                 </Button>
-                {navElms.map((ne, i) => (
-                    <NavTile
-                        key={i}
-                        selected={ne.id === props.view}
-                        onClick={() => props.setView(ne.id)}
+                {ordered.map((it, i) => (
+                    <NavRow
+                        key={it.key}
+                        item={it}
+                        index={i}
+                        total={ordered.length}
+                        view={props.view}
                         minimized={!open}
-                        {...ne}
+                        dragging={dragIdx === i}
+                        over={overIdx === i && dragIdx !== null && dragIdx !== i}
+                        onSelect={() => props.setView(it.key)}
+                        onDragStart={() => setDragIdx(i)}
+                        onDragOver={(e) => { e.preventDefault(); setOverIdx(i); }}
+                        onDrop={onDrop}
+                        onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
+                        onMove={(dir) => move(i, dir)}
+                        onRename={() => it.viewId != null && setRenaming({ id: it.viewId, name: it.title })}
+                        onDelete={() => {
+                            if (it.viewId == null) return;
+                            deleteView(it.viewId);
+                            if (props.view === it.key) props.setView("adcs");
+                        }}
                     />
                 ))}
             </div>
             <div className="flex flex-col items-center pb-4">
                 <Tooltip>
                     <TooltipTrigger asChild>
-                        <Button variant={open ? "default" : "ghost"}>
+                        <Button variant={open ? "default" : "ghost"} onClick={() => setBuilding(true)}>
                             <Plus />
                         </Button>
                     </TooltipTrigger>
@@ -571,6 +724,39 @@ function Sidebar(props: {
                     </TooltipContent>
                 </Tooltip>
             </div>
+            {building && (
+                <MopsEditor
+                    onCancel={() => setBuilding(false)}
+                    onCreate={async (name, blocks) => {
+                        setBuilding(false);
+                        const created = await createView(name, blocks);
+                        if (created) props.setView(`custom-${created.id}`);
+                    }}
+                />
+            )}
+            {renaming && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+                    <div className="absolute inset-0 bg-black/60" onClick={() => setRenaming(null)} />
+                    <div className="relative z-10 w-full max-w-sm rounded-lg border bg-background p-5 flex flex-col gap-4">
+                        <h3 className="font-semibold">Rename view</h3>
+                        <Input
+                            autoFocus
+                            value={renaming.name}
+                            onChange={(e) => setRenaming({ ...renaming, name: e.target.value })}
+                            onKeyDown={(e) => { if (e.key === "Enter" && renaming.name.trim()) { renameView(renaming.id, renaming.name.trim()); setRenaming(null); } }}
+                        />
+                        <div className="flex flex-row justify-end gap-2">
+                            <Button variant="ghost" onClick={() => setRenaming(null)}>Cancel</Button>
+                            <Button
+                                disabled={!renaming.name.trim()}
+                                onClick={() => { renameView(renaming.id, renaming.name.trim()); setRenaming(null); }}
+                            >
+                                Save
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -600,7 +786,7 @@ export default function DashboardView({ params }: {
                     <Heading />
                     <div className="flex-1 flex flex-col justify-end w-full rounded-tl-md overflow-hidden relative bg-background">
                         <div className="w-full h-full overflow-y-auto">
-                            <ViewContent view={view} />
+                            <ViewContent view={view} setView={setView} />
                         </div>
                     </div>
                 </div>

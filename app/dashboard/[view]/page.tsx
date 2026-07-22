@@ -11,7 +11,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGro
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { ArrowUp, Bell, CalendarDays, Check, ChevronDown, Command, Cross, Database, ExternalLink, GamepadDirectional, LogOut, Moon, PanelRightClose, PanelRightOpen, PanelTopClose, Plus, Pyramid, RadioTower, RefreshCcw, Satellite, Settings, SidebarClose, SidebarOpen, SquareTerminal, Sun, Triangle, TriangleAlert, User, X } from "lucide-react";
 import { redirect, useRouter } from "next/navigation";
-import { ReactNode, useEffect, useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import ControlsView from "@/components/views/controls-view";
 import { Spinner } from "@/components/ui/spinner";
@@ -22,8 +22,9 @@ import ScalarTelemetryView from "@/components/views/scalar-telemetry-view";
 import CalendarView from "@/components/views/calendar-view";
 import { SidebarContent, SidebarFooter, SidebarGroup, SidebarHeader, SidebarProvider } from "@/components/ui/sidebar";
 import { ProjectProvider, useProject } from "@/components/project-context";
+import { useSettings } from "@/lib/settings";
 import { CustomDashboardView, MopsEditor } from "@/components/views/custom-dashboard-view";
-import { ChevronUp, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { MoreVertical, Pencil, Trash2 } from "lucide-react";
 
 type NavTileType = {
     icon: ReactNode,
@@ -429,8 +430,18 @@ function ModeTrigger({ live }: { live: boolean }) {
 function Heading() {
     const _setTheme = bStore.use.setTheme();
     const _theme = bStore.use.theme();
-    const { projects, activeProject, setActiveId, notifications, markNotificationRead } = useProject();
+    const { projects, activeProject, setActiveId, notifications, markNotificationRead, clearNotifications } = useProject();
+    const router = useRouter();
+    const [settings] = useSettings();
     const live = !!activeProject?.config?.live;
+
+    const visibleNotifications = notifications.filter((n) =>
+        n.level === "critical"
+            ? true
+            : n.level === "warning"
+              ? settings.notifyWarning
+              : settings.notifyInfo
+    );
 
     return (
         <div className="sticky top-0 z-50">
@@ -493,28 +504,38 @@ function Heading() {
                             <Sun />
                         )}
                     </Button>
-                    <Button variant="ghost">
+                    <Button variant="ghost" onClick={() => router.push("/settings")}>
                         <Settings />
                     </Button>
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="ghost" className="relative">
                                 <Bell />
-                                {notifications.length > 0 && (
+                                {visibleNotifications.length > 0 && (
                                     <span className="absolute top-0 right-0 px-1 min-w-4 rounded-full bg-red-500 border-input font-semibold text-[11px] text-white">
-                                        {notifications.length}
+                                        {visibleNotifications.length}
                                     </span>
                                 )}
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent className="w-80">
-                            <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+                            <div className="flex flex-row items-center justify-between pr-1">
+                                <DropdownMenuLabel>Notifications</DropdownMenuLabel>
+                                {visibleNotifications.length > 0 && (
+                                    <button
+                                        onClick={(e) => { e.preventDefault(); clearNotifications(); }}
+                                        className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+                                    >
+                                        Clear all
+                                    </button>
+                                )}
+                            </div>
                             <DropdownMenuSeparator />
-                            {notifications.length === 0 ? (
+                            {visibleNotifications.length === 0 ? (
                                 <p className="p-4 px-8 text-center text-sm text-muted-foreground">You have no new notifications</p>
                             ) : (
                                 <div className="max-h-80 overflow-y-auto">
-                                    {notifications.map((n) => (
+                                    {visibleNotifications.map((n) => (
                                         <div key={n.id} className="flex flex-row items-start gap-2 px-2 py-1.5 rounded-sm hover:bg-secondary/50">
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex flex-row items-center gap-2">
@@ -552,34 +573,28 @@ type NavItem = { key: string; title: string; icon: ReactNode; custom: boolean; v
 
 function NavRow(props: {
     item: NavItem,
-    index: number,
-    total: number,
     view: string,
     minimized: boolean,
     dragging: boolean,
-    over: boolean,
+    transform: string,
+    menuOpen: boolean,
+    registerRef: (el: HTMLDivElement | null) => void,
     onSelect: () => void,
-    onDragStart: () => void,
-    onDragOver: (e: React.DragEvent) => void,
-    onDrop: () => void,
-    onDragEnd: () => void,
-    onMove: (dir: -1 | 1) => void,
+    onHandleDown: (e: React.PointerEvent) => void,
+    onOpenMenu: () => void,
+    onCloseMenu: () => void,
     onRename: () => void,
     onDelete: () => void,
 }) {
     const it = props.item;
     return (
         <div
-            draggable
-            onDragStart={props.onDragStart}
-            onDragOver={props.onDragOver}
-            onDrop={props.onDrop}
-            onDragEnd={props.onDragEnd}
-            className={cn(
-                "group relative",
-                props.dragging && "opacity-40",
-                props.over && "ring-2 ring-blue-500/60 rounded-sm"
-            )}
+            ref={props.registerRef}
+            className={cn("group relative", props.dragging && "z-50")}
+            style={{
+                transform: props.transform || undefined,
+                transition: props.dragging ? "none" : "transform 180ms ease",
+            }}
         >
             <NavTile
                 id={it.key}
@@ -589,35 +604,35 @@ function NavRow(props: {
                 onClick={props.onSelect}
                 minimized={props.minimized}
             />
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <button
-                        onClick={(e) => e.stopPropagation()}
-                        className="absolute top-1 -right-1 p-0.5 rounded opacity-40 group-hover:opacity-100 text-muted-foreground hover:text-foreground hover:bg-secondary transition-opacity cursor-pointer"
-                    >
-                        <MoreVertical className="w-3.5 h-3.5" />
-                    </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent side="right" align="start">
-                    <DropdownMenuItem disabled={props.index === 0} onClick={() => props.onMove(-1)}>
-                        <ChevronUp className="w-4 h-4" /> Move up
-                    </DropdownMenuItem>
-                    <DropdownMenuItem disabled={props.index === props.total - 1} onClick={() => props.onMove(1)}>
-                        <ChevronDown className="w-4 h-4" /> Move down
-                    </DropdownMenuItem>
-                    {it.custom && (
-                        <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={props.onRename}>
-                                <Pencil className="w-4 h-4" /> Rename
-                            </DropdownMenuItem>
-                            <DropdownMenuItem className="text-red-500" onClick={props.onDelete}>
-                                <Trash2 className="w-4 h-4" /> Delete
-                            </DropdownMenuItem>
-                        </>
-                    )}
-                </DropdownMenuContent>
-            </DropdownMenu>
+            <button
+                onPointerDown={(e) => { if (e.button === 0) { e.stopPropagation(); props.onHandleDown(e); } }}
+                onContextMenu={(e) => { if (it.custom) { e.preventDefault(); props.onOpenMenu(); } }}
+                onClick={(e) => e.stopPropagation()}
+                aria-label="Drag to reorder"
+                title={it.custom ? "Drag to reorder · right-click for options" : "Drag to reorder"}
+                className={cn(
+                    "absolute top-1 -right-1 p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-secondary transition-opacity touch-none",
+                    props.minimized ? "cursor-default" : "cursor-grab active:cursor-grabbing",
+                    props.dragging ? "opacity-100" : "opacity-40 group-hover:opacity-100"
+                )}
+            >
+                <MoreVertical className="w-3.5 h-3.5" />
+            </button>
+            {it.custom && (
+                <DropdownMenu open={props.menuOpen} onOpenChange={(o) => { if (!o) props.onCloseMenu(); }}>
+                    <DropdownMenuTrigger asChild>
+                        <span className="absolute top-1 -right-1 w-4 h-4 pointer-events-none" aria-hidden />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent side="right" align="start">
+                        <DropdownMenuItem onClick={props.onRename}>
+                            <Pencil className="w-4 h-4" /> Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-red-500" onClick={props.onDelete}>
+                            <Trash2 className="w-4 h-4" /> Delete
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            )}
         </div>
     );
 }
@@ -631,9 +646,11 @@ function Sidebar(props: {
     const { views, activeId, createView, reorderViews, renameView, deleteView } = useProject();
 
     const [order, setOrder] = useState<string[]>([]);
-    const [dragIdx, setDragIdx] = useState<number | null>(null);
-    const [overIdx, setOverIdx] = useState<number | null>(null);
+    const [drag, setDrag] = useState<{ key: string; startIdx: number; targetIdx: number; dy: number; step: number } | null>(null);
+    const [menuKey, setMenuKey] = useState<string | null>(null);
     const [renaming, setRenaming] = useState<{ id: number; name: string } | null>(null);
+    const rowRefs = useRef(new Map<string, HTMLDivElement>());
+    const dragRef = useRef<{ key: string; startIdx: number; startY: number; step: number; targetIdx: number; moved: boolean } | null>(null);
 
     const items: NavItem[] = useMemo(() => [
         ...navElms
@@ -656,30 +673,46 @@ function Sidebar(props: {
         if (customIds.length) reorderViews(customIds);
     };
 
-    const move = (index: number, dir: -1 | 1) => {
-        const to = index + dir;
-        if (to < 0 || to >= order.length) return;
-        const next = [...order];
-        [next[index], next[to]] = [next[to], next[index]];
-        persist(next);
-    };
-
-    const onDrop = () => {
-        if (dragIdx !== null && overIdx !== null && dragIdx !== overIdx) {
-            const next = [...order];
-            const [moved] = next.splice(dragIdx, 1);
-            next.splice(overIdx, 0, moved);
-            persist(next);
-        }
-        setDragIdx(null);
-        setOverIdx(null);
-    };
-
     const ordered = order.map((k) => items.find((i) => i.key === k)).filter(Boolean) as NavItem[];
+
+    const onDragMove = (e: PointerEvent) => {
+        const d = dragRef.current;
+        if (!d) return;
+        const dy = e.clientY - d.startY;
+        if (Math.abs(dy) > 3) d.moved = true;
+        const targetIdx = Math.max(0, Math.min(ordered.length - 1, d.startIdx + Math.round(dy / d.step)));
+        d.targetIdx = targetIdx;
+        setDrag({ key: d.key, startIdx: d.startIdx, targetIdx, dy, step: d.step });
+    };
+
+    const onDragUp = () => {
+        window.removeEventListener("pointermove", onDragMove);
+        window.removeEventListener("pointerup", onDragUp);
+        const d = dragRef.current;
+        dragRef.current = null;
+        setDrag(null);
+        if (!d || !d.moved || d.targetIdx === d.startIdx) return;
+        const keys = ordered.map((o) => o.key);
+        const [moved] = keys.splice(d.startIdx, 1);
+        keys.splice(d.targetIdx, 0, moved);
+        persist(keys);
+    };
+
+    const startDrag = (i: number, key: string, e: React.PointerEvent) => {
+        if (!open) return;
+        const a = rowRefs.current.get(ordered[0]?.key)?.getBoundingClientRect().top;
+        const b = rowRefs.current.get(ordered[1]?.key)?.getBoundingClientRect().top;
+        if (a == null || b == null) return;
+        const step = b - a;
+        dragRef.current = { key, startIdx: i, startY: e.clientY, step, targetIdx: i, moved: false };
+        setDrag({ key, startIdx: i, targetIdx: i, dy: 0, step });
+        window.addEventListener("pointermove", onDragMove);
+        window.addEventListener("pointerup", onDragUp);
+    };
 
     return (
         <div className="flex flex-col justify-between items-center">
-            <div className="flex flex-col items-center p-3 py-3 gap-4">
+            <div className="flex flex-col items-center p-3 py-3 gap-4 select-none">
                 <Button
                     variant="ghost"
                     className="-mb-1 text-secondary-foreground/80"
@@ -687,30 +720,41 @@ function Sidebar(props: {
                 >
                     {open ? <SidebarClose /> : <SidebarOpen />}
                 </Button>
-                {ordered.map((it, i) => (
-                    <NavRow
-                        key={it.key}
-                        item={it}
-                        index={i}
-                        total={ordered.length}
-                        view={props.view}
-                        minimized={!open}
-                        dragging={dragIdx === i}
-                        over={overIdx === i && dragIdx !== null && dragIdx !== i}
-                        onSelect={() => props.setView(it.key)}
-                        onDragStart={() => setDragIdx(i)}
-                        onDragOver={(e) => { e.preventDefault(); setOverIdx(i); }}
-                        onDrop={onDrop}
-                        onDragEnd={() => { setDragIdx(null); setOverIdx(null); }}
-                        onMove={(dir) => move(i, dir)}
-                        onRename={() => it.viewId != null && setRenaming({ id: it.viewId, name: it.title })}
-                        onDelete={() => {
-                            if (it.viewId == null) return;
-                            deleteView(it.viewId);
-                            if (props.view === it.key) props.setView("adcs");
-                        }}
-                    />
-                ))}
+                {ordered.map((it, i) => {
+                    let transform = "";
+                    if (drag) {
+                        if (it.key === drag.key) {
+                            transform = `translateY(${drag.dy}px)`;
+                        } else if (drag.startIdx < drag.targetIdx && i > drag.startIdx && i <= drag.targetIdx) {
+                            transform = `translateY(${-drag.step}px)`;
+                        } else if (drag.startIdx > drag.targetIdx && i < drag.startIdx && i >= drag.targetIdx) {
+                            transform = `translateY(${drag.step}px)`;
+                        }
+                    }
+                    return (
+                        <NavRow
+                            key={it.key}
+                            item={it}
+                            view={props.view}
+                            minimized={!open}
+                            dragging={!!drag && drag.key === it.key}
+                            transform={transform}
+                            menuOpen={menuKey === it.key}
+                            registerRef={(el) => { if (el) rowRefs.current.set(it.key, el); else rowRefs.current.delete(it.key); }}
+                            onSelect={() => props.setView(it.key)}
+                            onHandleDown={(e) => startDrag(i, it.key, e)}
+                            onOpenMenu={() => setMenuKey(it.key)}
+                            onCloseMenu={() => setMenuKey(null)}
+                            onRename={() => { setMenuKey(null); if (it.viewId != null) setRenaming({ id: it.viewId, name: it.title }); }}
+                            onDelete={() => {
+                                setMenuKey(null);
+                                if (it.viewId == null) return;
+                                deleteView(it.viewId);
+                                if (props.view === it.key) props.setView("adcs");
+                            }}
+                        />
+                    );
+                })}
             </div>
             <div className="flex flex-col items-center pb-4">
                 <Tooltip>

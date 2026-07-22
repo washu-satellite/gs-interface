@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { lastView } from "@/lib/last-view";
 
 type Profile = {
     id: string;
@@ -65,7 +66,7 @@ export default function ProfilePage() {
     return (
         <div className="min-h-screen flex flex-col items-center bg-secondary/40 dark:bg-secondary/20 p-6">
             <div className="w-full max-w-lg">
-                <Button variant="ghost" size="sm" className="mb-4" onClick={() => router.push("/dashboard/adcs")}>
+                <Button variant="ghost" size="sm" className="mb-4" onClick={() => router.push(`/dashboard/${lastView()}`)}>
                     <ArrowLeft className="w-4 h-4" /> Back to dashboard
                 </Button>
 

@@ -937,13 +937,11 @@ function PlaybackControls(props: {
     offsetMin: number;
     playing: boolean;
     simDate: Date;
-    speed: number;
     disabled?: boolean;
     onScrub: (min: number) => void;
     onToggle: () => void;
     onSkipStart: () => void;
     onSkipEnd: () => void;
-    onCycleSpeed: () => void;
 }) {
     return (
         <div className="flex flex-col items-center gap-3 bg-black/50 backdrop-blur-xl border rounded-xl px-5 py-3">
@@ -970,19 +968,6 @@ function PlaybackControls(props: {
                 <Button variant="outline" className="backdrop-blur-md" onClick={props.onSkipEnd} disabled={props.disabled}>
                     <SkipForward />
                 </Button>
-                <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button
-                            variant="outline"
-                            className="backdrop-blur-md font-mono tabular-nums min-w-[3.75rem]"
-                            onClick={props.onCycleSpeed}
-                            disabled={props.disabled}
-                        >
-                            {props.speed}x
-                        </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">Playback speed (1x–256x)</TooltipContent>
-                </Tooltip>
             </div>
         </div>
     )
@@ -1321,18 +1306,8 @@ function SceneWrapper() {
     const epochRef = useRef<number>(Date.now());
     const simTimeRef = useRef<number>(epochRef.current);
     const offsetRef = useRef<number>(0);
-    const speedRef = useRef<number>(1);
     const [offsetMin, setOffsetMin] = useState(0);
     const [playing, setPlaying] = useState(false);
-    const [speed, setSpeed] = useState(1);
-
-    const cycleSpeed = () => {
-        setSpeed((s) => {
-            const next = s >= 256 ? 1 : s * 2;
-            speedRef.current = next;
-            return next;
-        });
-    };
 
     const simDate = useMemo(() => new Date(epochRef.current + offsetMin * 60000), [offsetMin]);
 
@@ -1345,12 +1320,13 @@ function SceneWrapper() {
 
     useEffect(() => {
         if (!playing) return;
+        const RATE = SIM_WINDOW_MIN / 60;
         let raf = 0;
         let last = performance.now();
         const tick = (t: number) => {
             const dt = (t - last) / 1000;
             last = t;
-            const next = Math.min(SIM_WINDOW_MIN, offsetRef.current + (speedRef.current * dt) / 60);
+            const next = Math.min(SIM_WINDOW_MIN, offsetRef.current + RATE * dt);
             offsetRef.current = next;
             simTimeRef.current = epochRef.current + next * 60000;
             setOffsetMin(next);
@@ -1475,13 +1451,11 @@ function SceneWrapper() {
                         offsetMin={offsetMin}
                         playing={playing}
                         simDate={simDate}
-                        speed={speed}
                         disabled={!satrec}
                         onScrub={scrub}
                         onToggle={toggle}
                         onSkipStart={skipStart}
                         onSkipEnd={skipEnd}
-                        onCycleSpeed={cycleSpeed}
                     />
                 </div>
             </div>

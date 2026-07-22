@@ -12,6 +12,7 @@ import { bStore } from "@/hooks/useAppStore";
 import { useSettings } from "@/lib/settings";
 import { ProjectProvider, useProject } from "@/components/project-context";
 import { authClient } from "@/lib/auth-client";
+import { lastView } from "@/lib/last-view";
 import {
     ArrowLeft,
     Bell,
@@ -98,7 +99,7 @@ function SettingsBody() {
         <div className="min-h-screen bg-secondary/40 dark:bg-secondary/20 p-6">
             <div className="mx-auto w-full max-w-2xl flex flex-col gap-6">
                 <div className="flex flex-row items-center justify-between">
-                    <Button variant="ghost" size="sm" onClick={() => router.push("/dashboard/adcs")}>
+                    <Button variant="ghost" size="sm" onClick={() => router.push(`/dashboard/${lastView()}`)}>
                         <ArrowLeft className="w-4 h-4" /> Back to dashboard
                     </Button>
                     <h1 className="text-lg font-semibold">Settings</h1>

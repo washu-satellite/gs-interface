@@ -8,6 +8,7 @@ import { Centrifuge, Subscription } from 'centrifuge/build/protobuf';
 import { Geist, Geist_Mono } from 'next/font/google';
 import { redirect } from 'next/navigation';
 import React, { useEffect } from 'react';
+import { useSettings } from '@/lib/settings';
 
 interface AppContextState {
 }
@@ -43,6 +44,11 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
     
     const _addMessage = bStore.use.addMessage();
     const _addScalarMessage = bStore.use.addScalarMessage();
+
+    const [_settings] = useSettings();
+    useEffect(() => {
+        document.documentElement.style.fontSize = _settings.compactMode ? "15px" : "";
+    }, [_settings.compactMode]);
 
     // establish user information, connect to the Centrifuge server, generate handlers
     const init = async () => {

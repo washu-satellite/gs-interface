@@ -16,7 +16,7 @@ type ProjectContextValue = {
     markNotificationRead: (id: number) => Promise<void>;
     pushNotification: (input: { level?: Notification["level"]; title: string; message?: string | null }) => Promise<Notification | null>;
     clearNotifications: () => Promise<void>;
-    createView: (name: string, blocks: ViewItem[]) => Promise<DashboardView | null>;
+    createView: (name: string, blocks: ViewItem[], icon?: string) => Promise<DashboardView | null>;
     deleteView: (id: number) => Promise<void>;
     reorderViews: (orderedIds: number[]) => Promise<void>;
     renameView: (id: number, name: string) => Promise<void>;
@@ -119,12 +119,12 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     }, [activeId]);
 
     const createView = useCallback(
-        async (name: string, blocks: ViewItem[]) => {
+        async (name: string, blocks: ViewItem[], icon?: string) => {
             if (!activeId) return null;
             const res = await fetch(`/api/projects/${activeId}/views`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ name, blocks }),
+                body: JSON.stringify({ name, blocks, icon }),
             });
             const created: DashboardView = await res.json();
             setViews((vs) => [...vs, created]);

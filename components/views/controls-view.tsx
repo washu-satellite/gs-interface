@@ -582,8 +582,8 @@ function Earth(props: { radius?: number; rotate?: boolean; stations?: boolean; a
 // deployed whip antennas. Long axis is +X so it can fly along-track. Built
 // entirely from primitives — no external model needed.
 function CubeSat(props: { scale?: number }) {
-    const L = 0.8;   // length along +X (3U)
-    const W = 0.28;  // cross-section (Y, Z)
+    const L = 0.4;
+    const W = 0.4;
     const cellColor = "#1c2a66";
     const railColor = "#c7c7cd";
 
@@ -704,17 +704,31 @@ function OrbitTrack(props: { points: THREE.Vector3[] }) {
     return <Line points={props.points} color="#8ec5ff" lineWidth={1.5} transparent opacity={0.5} />;
 }
 
-function OrbitalScene() {
+function OrbitalScene(props: {
+    satrec: SatRec | null;
+    simTimeRef: { current: number };
+    trackPoints: THREE.Vector3[];
+    quatText?: string | null;
+    showOrbit: boolean;
+}) {
+    const station = GROUND_STATIONS[0];
+    const camPos = useMemo(
+        () => latLonToSpherePos(station.lon, station.lat, 1).normalize().multiplyScalar(2.4 * R_EARTH),
+        [station.lon, station.lat]
+    );
+
     return (
         <div className="w-40 h-40">
-            <Canvas shadows camera={{ position: [2 * R_EARTH, 0, 0], near: 0.1, far: R_EARTH * 2 }}>
-                <ambientLight intensity={1}/>
-                <directionalLight position={[10, 10, 10]} castShadow />
-                <OrbitalPath />
-                <Earth radius={R_EARTH} rotate={false} />
-                <OrbitalLabel />
-                <GroundLabel />
-                <OrbitControls enableZoom={false}/>
+            <Canvas camera={{ position: [camPos.x, camPos.y, camPos.z], near: 0.1, far: R_EARTH * 4 }}>
+                <ambientLight intensity={1.1} />
+                <directionalLight position={[camPos.x, camPos.y, camPos.z]} intensity={1} />
+                <Earth radius={R_EARTH} rotate={false} stations atmosphere>
+                    {props.showOrbit && <OrbitTrack points={props.trackPoints} />}
+                    {props.satrec && (
+                        <Sgp4Satellite satrec={props.satrec} simTimeRef={props.simTimeRef} quatText={props.quatText} />
+                    )}
+                </Earth>
+                <OrbitControls enableZoom={false} enablePan={false} />
             </Canvas>
         </div>
     );
@@ -923,11 +937,13 @@ function PlaybackControls(props: {
     offsetMin: number;
     playing: boolean;
     simDate: Date;
+    speed: number;
     disabled?: boolean;
     onScrub: (min: number) => void;
     onToggle: () => void;
     onSkipStart: () => void;
     onSkipEnd: () => void;
+    onCycleSpeed: () => void;
 }) {
     return (
         <div className="flex flex-col items-center gap-3 bg-black/50 backdrop-blur-xl border rounded-xl px-5 py-3">
@@ -954,6 +970,19 @@ function PlaybackControls(props: {
                 <Button variant="outline" className="backdrop-blur-md" onClick={props.onSkipEnd} disabled={props.disabled}>
                     <SkipForward />
                 </Button>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Button
+                            variant="outline"
+                            className="backdrop-blur-md font-mono tabular-nums min-w-[3.75rem]"
+                            onClick={props.onCycleSpeed}
+                            disabled={props.disabled}
+                        >
+                            {props.speed}x
+                        </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">Playback speed (1x–256x)</TooltipContent>
+                </Tooltip>
             </div>
         </div>
     )
@@ -1285,13 +1314,25 @@ function SceneWrapper() {
     const channels = bStore.use.scalarChannels();
     const { satrec, name: tleName, status: tleStatus, error: tleError } = useTle(config);
 
+    const isScalar = useMemo(() => tleName.toLowerCase().includes("scalar"), [tleName]);
+
     const [configOpen, setConfigOpen] = useState(false);
 
     const epochRef = useRef<number>(Date.now());
     const simTimeRef = useRef<number>(epochRef.current);
     const offsetRef = useRef<number>(0);
+    const speedRef = useRef<number>(1);
     const [offsetMin, setOffsetMin] = useState(0);
     const [playing, setPlaying] = useState(false);
+    const [speed, setSpeed] = useState(1);
+
+    const cycleSpeed = () => {
+        setSpeed((s) => {
+            const next = s >= 256 ? 1 : s * 2;
+            speedRef.current = next;
+            return next;
+        });
+    };
 
     const simDate = useMemo(() => new Date(epochRef.current + offsetMin * 60000), [offsetMin]);
 
@@ -1304,13 +1345,12 @@ function SceneWrapper() {
 
     useEffect(() => {
         if (!playing) return;
-        const RATE = SIM_WINDOW_MIN / 60;
         let raf = 0;
         let last = performance.now();
         const tick = (t: number) => {
             const dt = (t - last) / 1000;
             last = t;
-            const next = Math.min(SIM_WINDOW_MIN, offsetRef.current + RATE * dt);
+            const next = Math.min(SIM_WINDOW_MIN, offsetRef.current + (speedRef.current * dt) / 60);
             offsetRef.current = next;
             simTimeRef.current = epochRef.current + next * 60000;
             setOffsetMin(next);
@@ -1373,17 +1413,17 @@ function SceneWrapper() {
                 </Canvas>
             </KeyboardControls>
 
-            {!live && (
+            {!isScalar && (
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 mt-4">
                     <Tooltip>
                         <TooltipTrigger asChild>
                             <div className="flex flex-row items-center gap-2 rounded-full border border-red-500/50 bg-red-950/60 backdrop-blur-xl px-3 py-1.5 text-red-400">
                                 <TriangleAlert className="w-4 h-4" />
-                                <span className="text-xs font-semibold uppercase tracking-wide">Not Live</span>
+                                <span className="text-xs font-semibold uppercase tracking-wide">Not Scalar</span>
                             </div>
                         </TooltipTrigger>
                         <TooltipContent side="bottom">
-                            Spacecraft is not live — showing predicted SGP4 orbit only.
+                            The simulated object may not be SCALAR. Load SCALAR’s NORAD ID or TLE to track the mission spacecraft.
                         </TooltipContent>
                     </Tooltip>
                 </div>
@@ -1435,11 +1475,25 @@ function SceneWrapper() {
                         offsetMin={offsetMin}
                         playing={playing}
                         simDate={simDate}
+                        speed={speed}
                         disabled={!satrec}
                         onScrub={scrub}
                         onToggle={toggle}
                         onSkipStart={skipStart}
                         onSkipEnd={skipEnd}
+                        onCycleSpeed={cycleSpeed}
+                    />
+                </div>
+            </div>
+
+            <div className="absolute bottom-0 left-0 m-4">
+                <div className="shrink-0 bg-black/50 backdrop-blur-xl rounded-full border relative overflow-hidden">
+                    <OrbitalScene
+                        satrec={satrec}
+                        simTimeRef={simTimeRef}
+                        trackPoints={trackPoints}
+                        quatText={quatText}
+                        showOrbit={config.showOrbit}
                     />
                 </div>
             </div>

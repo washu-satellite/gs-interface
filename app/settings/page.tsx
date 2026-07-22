@@ -284,7 +284,7 @@ function SettingsBody() {
                 </Section>
 
                 <Section icon={<Terminal className="w-4 h-4" />} title="About">
-                    <Row label="Ground Station Interface" control={<span className="text-sm text-muted-foreground font-mono">v0.1.0</span>} />
+                    <Row label="Ground Station Interface" control={<span className="text-sm text-muted-foreground font-mono">v2.1.0</span>} />
                 </Section>
             </div>
         </div>

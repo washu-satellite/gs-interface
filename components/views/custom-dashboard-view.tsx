@@ -22,6 +22,8 @@ import {
 } from "@/lib/blocks";
 import { ResponsiveLine } from "@nivo/line";
 import { Gauge, Hash, LayoutGrid, LineChart, Plus, Trash2, X } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ViewIcon, VIEW_ICON_KEYS } from "@/lib/view-icons";
 
 const GRID = 16;
 const MIN_W = 176;
@@ -283,8 +285,9 @@ function EditorItem(props: {
     );
 }
 
-export function MopsEditor(props: { onCancel: () => void; onCreate: (name: string, blocks: ViewItem[]) => void }) {
+export function MopsEditor(props: { onCancel: () => void; onCreate: (name: string, blocks: ViewItem[], icon: string) => void }) {
     const [name, setName] = useState("");
+    const [icon, setIcon] = useState("grid");
     const [items, setItems] = useState<ViewItem[]>([]);
     const counter = useRef(0);
 
@@ -322,6 +325,34 @@ export function MopsEditor(props: { onCancel: () => void; onCreate: (name: strin
                 <div className="flex flex-row items-center gap-3">
                     <LayoutGrid className="w-4 h-4" />
                     <span className="font-semibold">Build MOPS View</span>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                type="button"
+                                title="View icon"
+                                className="flex items-center justify-center w-8 h-8 rounded-md border hover:bg-secondary cursor-pointer shrink-0"
+                            >
+                                <ViewIcon icon={icon} className="w-4 h-4" />
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="p-2 w-auto">
+                            <div className="grid grid-cols-5 gap-1">
+                                {VIEW_ICON_KEYS.map((k) => (
+                                    <button
+                                        key={k}
+                                        type="button"
+                                        onClick={() => setIcon(k)}
+                                        className={cn(
+                                            "flex items-center justify-center rounded-md p-2 hover:bg-secondary cursor-pointer",
+                                            icon === k && "bg-secondary ring-1 ring-blue-500/50"
+                                        )}
+                                    >
+                                        <ViewIcon icon={k} className="w-4 h-4" />
+                                    </button>
+                                ))}
+                            </div>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                     <Input
                         className="w-64 h-8"
                         placeholder="View name (e.g. EPS Overview)"
@@ -333,7 +364,7 @@ export function MopsEditor(props: { onCancel: () => void; onCreate: (name: strin
                 <div className="flex flex-row items-center gap-2">
                     <span className="text-xs text-muted-foreground">{items.length} blocks</span>
                     <Button variant="ghost" onClick={props.onCancel}>Cancel</Button>
-                    <Button disabled={!name.trim() || items.length === 0} onClick={() => props.onCreate(name.trim(), items)}>
+                    <Button disabled={!name.trim() || items.length === 0} onClick={() => props.onCreate(name.trim(), items, icon)}>
                         Save View
                     </Button>
                 </div>

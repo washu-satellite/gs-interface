@@ -142,6 +142,7 @@ export type DashboardView = {
     name: string;
     blocks: ViewItem[];
     ord: number;
+    icon?: string;
 };
 
 export function seededSeries(item: ViewItem, block: MetricBlock, points = 24) {

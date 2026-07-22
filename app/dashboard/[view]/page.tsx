@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { ArrowUp, Bell, CalendarDays, Check, ChevronDown, Command, Cross, Database, ExternalLink, GamepadDirectional, LogOut, Moon, PanelRightClose, PanelRightOpen, PanelTopClose, Plus, Pyramid, RadioTower, RefreshCcw, Satellite, Settings, SidebarClose, SidebarOpen, SquareTerminal, Sun, Triangle, TriangleAlert, User, X } from "lucide-react";
+import { ArrowUp, Bell, CalendarDays, Check, ChevronDown, Command, Cross, Database, ExternalLink, LogOut, Moon, PanelRightClose, PanelRightOpen, PanelTopClose, Plus, Pyramid, RadioTower, RefreshCcw, Satellite, Settings, SidebarClose, SidebarOpen, SquareTerminal, Sun, Triangle, TriangleAlert, User, X } from "lucide-react";
+import { ViewIcon } from "@/lib/view-icons";
 import { redirect, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
@@ -656,7 +657,7 @@ function Sidebar(props: {
         ...navElms
             .filter((n) => n.id !== "scalar" || activeId === "scalar")
             .map((n) => ({ key: n.id, title: n.title, icon: n.icon, custom: false })),
-        ...views.map((v) => ({ key: `custom-${v.id}`, title: v.name, icon: <GamepadDirectional className="w-4" />, custom: true, viewId: v.id })),
+        ...views.map((v) => ({ key: `custom-${v.id}`, title: v.name, icon: <ViewIcon icon={v.icon} className="w-4" />, custom: true, viewId: v.id })),
     ], [views, activeId]);
 
     useEffect(() => {
@@ -771,9 +772,9 @@ function Sidebar(props: {
             {building && (
                 <MopsEditor
                     onCancel={() => setBuilding(false)}
-                    onCreate={async (name, blocks) => {
+                    onCreate={async (name, blocks, icon) => {
                         setBuilding(false);
-                        const created = await createView(name, blocks);
+                        const created = await createView(name, blocks, icon);
                         if (created) props.setView(`custom-${created.id}`);
                     }}
                 />

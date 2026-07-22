@@ -1,12 +1,13 @@
-import { db } from "@/lib/db";
+import { db, ensureViewSchema } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
+    await ensureViewSchema();
     const { rows } = await db.query(
-        'SELECT id, "projectId", name, blocks, ord FROM dashboard_view WHERE "projectId" = $1 ORDER BY ord, id',
+        'SELECT id, "projectId", name, blocks, ord, icon FROM dashboard_view WHERE "projectId" = $1 ORDER BY ord, id',
         [id]
     );
     return NextResponse.json(rows);
@@ -26,14 +27,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
+    await ensureViewSchema();
     const body = await req.json();
     const name: string = (body.name ?? "Untitled View").toString().slice(0, 60);
     const blocks: string[] = Array.isArray(body.blocks) ? body.blocks : [];
+    const icon: string = typeof body.icon === "string" && body.icon ? body.icon.slice(0, 32) : "grid";
     const { rows } = await db.query(
-        `INSERT INTO dashboard_view ("projectId", name, blocks, ord)
-         VALUES ($1, $2, $3, (SELECT COALESCE(MAX(ord), 0) + 1 FROM dashboard_view WHERE "projectId" = $1))
-         RETURNING id, "projectId", name, blocks, ord`,
-        [id, name, JSON.stringify(blocks)]
+        `INSERT INTO dashboard_view ("projectId", name, blocks, ord, icon)
+         VALUES ($1, $2, $3, (SELECT COALESCE(MAX(ord), 0) + 1 FROM dashboard_view WHERE "projectId" = $1), $4)
+         RETURNING id, "projectId", name, blocks, ord, icon`,
+        [id, name, JSON.stringify(blocks), icon]
     );
     return NextResponse.json(rows[0]);
 }

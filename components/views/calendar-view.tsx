@@ -39,7 +39,12 @@ import {
     Filter,
     Clock,
     Satellite,
+    CalendarSync,
+    Copy,
+    Check,
+    X,
 } from "lucide-react"
+import { useProject } from "@/components/project-context"
 
 // Event taxonomy for the ground-station schedule. Each type carries the
 // Tailwind tokens used to render its chips / dots so the calendar and the
@@ -182,6 +187,30 @@ function parseDateInput(value: string) {
 function parseTimeToMinutes(value: string) {
     const [h, m] = value.split(":").map(Number)
     return h * 60 + m
+}
+
+type CalendarRow = {
+    id: number
+    kind: EventKind
+    title: string
+    startsAt: string
+    durationMin: number
+    station: string | null
+    detail: string | null
+}
+
+function rowToEvent(row: CalendarRow): MissionEvent {
+    const d = new Date(row.startsAt)
+    return {
+        id: String(row.id),
+        kind: row.kind,
+        title: row.title,
+        start: d.getHours() * 60 + d.getMinutes(),
+        durationMin: row.durationMin,
+        date: startOfDay(d),
+        station: row.station ?? undefined,
+        detail: row.detail ?? undefined,
+    }
 }
 
 // Index events by day (toDateString key) so day cells can look them up in
@@ -535,18 +564,101 @@ function ScheduleSheet(props: {
     )
 }
 
+function SyncDialog(props: { projectId: string | null; open: boolean; onClose: () => void }) {
+    const [url, setUrl] = React.useState("")
+    const [copied, setCopied] = React.useState(false)
+
+    React.useEffect(() => {
+        if (!props.open || !props.projectId) return
+        let alive = true
+        fetch(`/api/projects/${props.projectId}/calendar/feed`)
+            .then((r) => r.json())
+            .then((d) => { if (alive && d?.url) setUrl(d.url) })
+            .catch(() => {})
+        return () => { alive = false }
+    }, [props.open, props.projectId])
+
+    if (!props.open) return null
+
+    const webcal = url.replace(/^https?:\/\//, "webcal://")
+
+    const copy = async () => {
+        if (!url) return
+        try {
+            if (navigator.clipboard?.writeText) {
+                await navigator.clipboard.writeText(url)
+            } else {
+                const ta = document.createElement("textarea")
+                ta.value = url
+                ta.style.position = "fixed"
+                ta.style.opacity = "0"
+                document.body.appendChild(ta)
+                ta.select()
+                document.execCommand("copy")
+                document.body.removeChild(ta)
+            }
+            setCopied(true)
+            setTimeout(() => setCopied(false), 1500)
+        } catch {}
+    }
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/60" onClick={props.onClose} />
+            <div className="relative z-10 w-full max-w-lg rounded-lg border bg-background p-5 flex flex-col gap-4">
+                <div className="flex flex-row items-center justify-between">
+                    <div className="flex flex-row items-center gap-2">
+                        <CalendarSync className="w-4 h-4" />
+                        <h3 className="font-semibold">Sync to your calendar</h3>
+                    </div>
+                    <button onClick={props.onClose} className="p-1 -m-1 rounded text-muted-foreground hover:text-foreground cursor-pointer">
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                    Subscribe to the mission schedule from Google Calendar, Apple Calendar, or Outlook. New and updated events appear automatically — Google can take several hours to refresh a subscribed URL.
+                </p>
+                <div className="flex flex-col gap-1.5">
+                    <Label className="text-xs uppercase tracking-wide text-muted-foreground">Feed URL</Label>
+                    <div className="flex flex-row gap-2">
+                        <Input readOnly value={url} placeholder="Loading…" onFocus={(e) => e.currentTarget.select()} className="font-mono text-xs" />
+                        <Button variant="secondary" onClick={copy} disabled={!url}>
+                            {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                            {copied ? "Copied" : "Copy"}
+                        </Button>
+                    </div>
+                </div>
+                <div className="rounded-md border bg-secondary/30 p-3 text-xs text-muted-foreground flex flex-col gap-1">
+                    <p className="font-medium text-foreground">Google Calendar</p>
+                    <p>Other calendars → <span className="font-medium">＋ → From URL</span> → paste the feed URL → Add calendar.</p>
+                    <p className="font-medium text-foreground pt-1.5">Apple Calendar</p>
+                    <p>
+                        File → New Calendar Subscription → paste → Subscribe
+                        {url && <> · <a href={webcal} className="underline text-blue-500">open with webcal</a></>}.
+                    </p>
+                </div>
+            </div>
+        </div>
+    )
+}
+
 export default function CalendarView() {
     const today = React.useMemo(() => startOfDay(new Date()), [])
+    const { activeId } = useProject()
 
-    // Live schedule: seed rows resolved to absolute dates, plus anything the
-    // user creates via the Schedule sheet.
-    const [events, setEvents] = React.useState<MissionEvent[]>(() =>
-        SEED_EVENTS.map(({ dayOffset, ...rest }) => ({
-            ...rest,
-            date: addDays(today, dayOffset),
-        }))
-    )
+    const [events, setEvents] = React.useState<MissionEvent[]>([])
+    const [syncOpen, setSyncOpen] = React.useState(false)
     const eventsByDate = useEventsByDate(events)
+
+    React.useEffect(() => {
+        if (!activeId) { setEvents([]); return }
+        let alive = true
+        fetch(`/api/projects/${activeId}/calendar`)
+            .then((r) => r.json())
+            .then((rows: CalendarRow[]) => { if (alive && Array.isArray(rows)) setEvents(rows.map(rowToEvent)) })
+            .catch(() => {})
+        return () => { alive = false }
+    }, [activeId])
 
     // Month the grid is currently displaying (first of month).
     const [cursor, setCursor] = React.useState(
@@ -578,13 +690,30 @@ export default function CalendarView() {
     const shiftMonth = (delta: number) =>
         setCursor((c) => new Date(c.getFullYear(), c.getMonth() + delta, 1))
 
-    // Add a user-created event, then jump the view to it and make sure its
-    // type filter is on so it's immediately visible.
-    const addEvent = (ev: MissionEvent) => {
-        setEvents((prev) => [...prev, ev])
-        setCursor(new Date(ev.date.getFullYear(), ev.date.getMonth(), 1))
-        setSelected(ev.date)
-        setFilters((f) => ({ ...f, [ev.kind]: true }))
+    const addEvent = async (ev: MissionEvent) => {
+        if (!activeId) return
+        const startsAt = new Date(
+            ev.date.getFullYear(), ev.date.getMonth(), ev.date.getDate(),
+            Math.floor(ev.start / 60), ev.start % 60
+        ).toISOString()
+        const res = await fetch(`/api/projects/${activeId}/calendar`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                kind: ev.kind,
+                title: ev.title,
+                startsAt,
+                durationMin: ev.durationMin,
+                station: ev.station ?? null,
+                detail: ev.detail ?? null,
+            }),
+        })
+        if (!res.ok) return
+        const created = rowToEvent(await res.json())
+        setEvents((prev) => [...prev, created])
+        setCursor(new Date(created.date.getFullYear(), created.date.getMonth(), 1))
+        setSelected(created.date)
+        setFilters((f) => ({ ...f, [created.kind]: true }))
     }
 
     return (
@@ -642,6 +771,10 @@ export default function CalendarView() {
                                 ))}
                             </DropdownMenuContent>
                         </DropdownMenu>
+                        <Button variant="outline" size="sm" onClick={() => setSyncOpen(true)}>
+                            <CalendarSync className="w-4 h-4" />
+                            <span className="hidden sm:inline">Sync</span>
+                        </Button>
                         <ScheduleSheet defaultDate={selected} onCreate={addEvent} />
                     </div>
                 </div>
@@ -678,6 +811,8 @@ export default function CalendarView() {
             <div className="lg:w-80 shrink-0 rounded-md border overflow-hidden bg-background flex flex-col min-h-0 max-h-full">
                 <DayDetail date={selected} events={selectedEvents} />
             </div>
+
+            <SyncDialog projectId={activeId} open={syncOpen} onClose={() => setSyncOpen(false)} />
         </div>
     )
 }

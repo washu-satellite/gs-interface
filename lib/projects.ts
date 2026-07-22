@@ -7,6 +7,14 @@ export type AdcsConfig = {
     altitudeKm: string;
     regime: "polar" | "sso" | "custom";
     dataSource: "live" | "playback";
+    noradId: string;
+    tleName: string;
+    tleLine1: string;
+    tleLine2: string;
+    chMode: string;
+    chAngularRate: string;
+    chCurrent: string;
+    chQuaternion: string;
     showOrbit: boolean;
     showAtmosphere: boolean;
     showStation: boolean;
@@ -23,10 +31,18 @@ export const DEFAULT_ADCS_CONFIG: AdcsConfig = {
     altitudeKm: "551",
     regime: "polar",
     dataSource: "live",
+    noradId: "25544",
+    tleName: "",
+    tleLine1: "",
+    tleLine2: "",
+    chMode: "",
+    chAngularRate: "",
+    chCurrent: "",
+    chQuaternion: "",
     showOrbit: true,
     showAtmosphere: true,
     showStation: true,
-    autoRotate: true,
+    autoRotate: false,
     live: false,
 };
 

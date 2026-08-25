@@ -1,9 +1,13 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const { response: unauth } = await requireSession();
+    if (unauth) return unauth;
+
     const { id } = await params;
     const { rows } = await db.query(
         'SELECT id, "projectId", level, title, message, "createdAt" FROM notification WHERE "projectId" = $1 AND read = false ORDER BY "createdAt" DESC',
@@ -13,6 +17,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const { response: unauth } = await requireSession();
+    if (unauth) return unauth;
+
     const { id } = await params;
     const body = await req.json().catch(() => ({}));
     const level: string = ["info", "warning", "critical"].includes(body?.level) ? body.level : "info";
@@ -31,6 +38,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const { response: unauth } = await requireSession();
+    if (unauth) return unauth;
+
     const { id } = await params;
     await db.query('UPDATE notification SET read = true WHERE "projectId" = $1 AND read = false', [id]);
     return NextResponse.json({ ok: true });

@@ -39,6 +39,7 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
     const _theme = bStore.use.theme();
 
     const _setClient = bStore.use.setClient();
+    const _setConnected = bStore.use.setConnected();
     const _subscribe = bStore.use.subscribe();
     const _setUser = bStore.use.setUser();
     
@@ -67,19 +68,29 @@ const AppContextProvider: React.FC<React.PropsWithChildren<{}>> = (props) => {
         if (bStore.getState().client)
             return;
 
-        const r = await fetch("/api/get-token");
-        if (!r.ok) { console.error("Failed to retrieve JWT for socket"); return; }
+        const getToken = async () => {
+            const r = await fetch("/api/get-token");
+            if (!r.ok) throw new Error(`Failed to retrieve JWT for socket (${r.status})`);
+            const { token } = await r.json();
+            return token as string;
+        };
 
-        const { token } = await r.json();
-
-        console.log(`Got the token: ${token}`);
-
-        const c = new Centrifuge(`ws://localhost:8000/connection/websocket?format=protobuf`, {
-            token: token
+        const centrifugoUrl = process.env.NEXT_PUBLIC_CENTRIFUGO_URL ?? "ws://localhost:8000/connection/websocket";
+        const c = new Centrifuge(`${centrifugoUrl}?format=protobuf`, {
+            getToken
         });
 
         c.on('connected', ctx => {
             console.log("Connected to server");
+            _setConnected(true);
+        });
+
+        c.on('disconnected', ctx => {
+            _setConnected(false);
+        });
+
+        c.on('error', ctx => {
+            _setConnected(false);
         });
 
         c.on('message', ctx => {

@@ -16,6 +16,5 @@ export const DEFAULT_TCP_PORT = 7070;
 
 export const DEFAULT_HTTP_PORT = 3000;
 
-// SCALAR gds-bridge service (gs-routing/gds-bridge/): F' command relay + dictionary
-export const GDS_BRIDGE_HTTP_HOST =
-    process.env.NEXT_PUBLIC_GDS_BRIDGE_HOST ?? "http://localhost:8090";
+// The gds-bridge host is server-only (GDS_BRIDGE_URL) and reached through
+// /api/scalar/* so uplink can't be issued from the browser without a session.

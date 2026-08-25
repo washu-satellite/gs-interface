@@ -1,5 +1,5 @@
 import React, { ReactNode } from "react";
-import { Satellite, Telescope } from "lucide-react";
+import { Satellite } from "lucide-react";
 import { CommandBadgeType } from "@/types/ui";
 import { title } from "process";
 import { create, Message } from "@bufbuild/protobuf";
@@ -15,23 +15,13 @@ import { buildEnvelope } from "@/lib/utils";
 import { bStore } from "@/hooks/useAppStore";
 import { Input } from "@/components/ui/input";
 
-type Group = 'AIRIS' | 'GS-2' | 'SCALAR' | 'Internal';
+type Group = 'GS-2' | 'SCALAR' | 'Internal';
 
 export const channelGroups: {
     group: Group,
     icon: ReactNode,
     channels: string[]
 }[] = [
-    {
-        group: 'AIRIS',
-        icon: <Telescope />,
-        channels: [
-            "Errors",
-            "Warnings",
-            "Telemetry",
-            "Commands"
-        ]
-    },
     {
         group: 'SCALAR',
         icon: <Satellite />,
@@ -169,10 +159,6 @@ const internalMessages = [
 ]
 
 export const commandDetails = [
-    // {
-    //     title: "AIRIS Commands",
-    //     values: airisCommands
-    // },
     {
         title: "Internal Commands",
         values: internalCommands
@@ -180,8 +166,7 @@ export const commandDetails = [
 ];
 
 export const allCommands = [
-    internalCommands,
-    // airisCommands
+    internalCommands
 ].flat();
 
 export type CommandKey = keyof typeof commandDetails

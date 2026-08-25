@@ -1,9 +1,13 @@
 import { db } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const { response: unauth } = await requireSession();
+    if (unauth) return unauth;
+
     const { id } = await params;
     const { rows } = await db.query(
         'SELECT id, name, ord, config, configured FROM project WHERE id = $1',
@@ -14,6 +18,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const { response: unauth } = await requireSession();
+    if (unauth) return unauth;
+
     const { id } = await params;
     const body = await req.json();
     const { rows } = await db.query(

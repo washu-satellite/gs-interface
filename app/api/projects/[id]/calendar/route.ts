@@ -1,11 +1,15 @@
 import { db, ensureCalendarSchema } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
 const KINDS = ["pass", "downlink", "maneuver", "maintenance", "anomaly", "planning", "misc"];
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const { response: unauth } = await requireSession();
+    if (unauth) return unauth;
+
     const { id } = await params;
     await ensureCalendarSchema();
     const { rows } = await db.query(
@@ -16,6 +20,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const { response: unauth } = await requireSession();
+    if (unauth) return unauth;
+
     const { id } = await params;
     await ensureCalendarSchema();
     const body = await req.json().catch(() => ({}));

@@ -138,13 +138,18 @@ function SettingsBody() {
                     />
                     <Row
                         label="Critical notifications"
-                        hint="Critical alerts cannot be muted while live."
-                        control={<Checkbox checked disabled />}
+                        hint="Critical alerts cannot be muted while a mission session is live."
+                        control={<Checkbox checked={settings.notifyCritical} onCheckedChange={(c) => update({ notifyCritical: c === true })} />}
                     />
                     <Row
                         label="Desktop notifications"
                         hint="Show OS-level notifications for new alerts."
                         control={<Checkbox checked={settings.desktopNotifications} onCheckedChange={(c) => requestDesktop(c === true)} />}
+                    />
+                    <Row
+                        label="Alert on critical telemetry"
+                        hint="Raise a desktop notification when a FATAL or WARNING event arrives on the SCALAR link."
+                        control={<Checkbox checked={settings.alertOnTelemetryEvents} onCheckedChange={(c) => update({ alertOnTelemetryEvents: c === true })} />}
                     />
                     <Row
                         label="Notification sound"

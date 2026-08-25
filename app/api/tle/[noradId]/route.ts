@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,9 @@ async function fetchTle(id: string): Promise<{ ok: true; text: string } | { ok: 
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ noradId: string }> }) {
+    const { response: unauth } = await requireSession();
+    if (unauth) return unauth;
+
     const { noradId } = await params;
     const id = (noradId ?? "").replace(/\D/g, "");
     if (!id) return NextResponse.json({ error: "Invalid NORAD ID" }, { status: 400 });

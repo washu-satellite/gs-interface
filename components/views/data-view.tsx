@@ -14,7 +14,7 @@ import {
     useReactTable,
     VisibilityState,
 } from "@tanstack/react-table"
-import { ArrowUp, ArrowUpDown, ChevronDown, Copy, Download, ExternalLink, Flame, MoreHorizontal, RefreshCcw, Snowflake } from "lucide-react"
+import { ArrowUpDown, ChevronDown, Copy, Flame, RefreshCcw, Snowflake } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -38,34 +38,15 @@ import {
 } from "@/components/ui/table"
 import { group } from "console"
 import { Badge } from "../ui/badge"
-import { Beacon, Beacon_OpsMode, BeaconSchema } from "@/gen/airis/telemetry/v1/telemetry_pb"
 import clsx from "clsx"
 import { Collapsible } from "../ui/collapsible"
 import { CollapsibleContent, CollapsibleTrigger } from "@radix-ui/react-collapsible"
 import { bStore, MessageDetails } from "@/hooks/useAppStore"
 import { Message } from "@/gen/messages/transport/v1/transport_pb"
 import { ChannelBadge } from "../channel-menu"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-
-import { ResponsiveLine } from "@nivo/line"
 import { cn } from "@/lib/utils"
-
-function getTimeVal(val: any) {
-    return new Date(Number(val.seconds) * 1000);
-}
-
-function formatValue(val: any) {
-    if (typeof val === 'bigint') {
-        return val;
-    }
-
-    if (val["seconds"]) {
-        return (getTimeVal(val)).toLocaleString('en-US');
-    }
-
-    const num = +val;
-    return !Number.isNaN(num) ? num.toFixed(2) : val;
-}
+import { ScalarEventRecord } from "@/types/scalar"
+import { formatScalarTime, severityColor } from "@/lib/scalar-severity"
 
 export const columns: ColumnDef<MessageDetails>[] = [
     {
@@ -135,18 +116,23 @@ export const columns: ColumnDef<MessageDetails>[] = [
                         </p>
                     </CollapsibleTrigger>
                 )
-            case 'airisBeacon':
-                const beacon: Beacon = row.getValue("data");
+            case 'scalarEvent':
+                const evr: ScalarEventRecord = row.getValue("data");
 
                 return (
                     <CollapsibleTrigger asChild>
-                        <p className="cursor-pointer text-wrap line-clamp-1 text-secondary-foreground/80">
-                            {Object.keys(beacon).map((k, i) => i != 0 ?(
-                                <span key={i} className="mr-2">
-                                    <span>{k}: </span>
-                                    {`${formatValue(beacon[k as keyof Beacon])}`}
-                                </span>
-                            ) : (<React.Fragment key={i} />))}
+                        <p className="cursor-pointer text-wrap line-clamp-1 font-mono">
+                            <span className={cn("mr-2", severityColor(evr.severity))}>{evr.severity}</span>
+                            <span className="mr-2">{evr.name}</span>
+                            <span className="text-secondary-foreground/80">{evr.message}</span>
+                        </p>
+                    </CollapsibleTrigger>
+                )
+            default:
+                return (
+                    <CollapsibleTrigger asChild>
+                        <p className="cursor-pointer text-wrap line-clamp-1 text-muted-foreground italic">
+                            Unrecognized message type{id ? ` (${id})` : ""}
                         </p>
                     </CollapsibleTrigger>
                 )
@@ -202,45 +188,10 @@ export const columns: ColumnDef<MessageDetails>[] = [
     //   },
 ]
 
-function getValues(messages: MessageDetails[], tId: string, tData: MessageDetails["data"], field: string) {
-    // const index = messages.findIndex(m => m.id === messageId);
-
-    console.log(tData);
-
-    const time = getTimeVal(tData["lastUplink" as keyof typeof tData]);
-
-    console.log(time);
-
-    const dataValues = messages.filter(
-        (m) => (m.id === tId) && (getTimeVal(m.data["lastUplink" as keyof typeof m.data]) <= time)
-    ).map((m, i) => ({
-        x: i,
-        y: m.data[field as keyof typeof m.data]
-    }));
-
-    console.log("VALUES");
-    console.log([
-        {
-            "id": "power",
-            "data": dataValues
-        }
-    ]);
-
-    return [
-        {
-            "id": "power",
-            "data": dataValues
-        }
-    ];
-}
-
-
 function MessageContent(props: {
     id: MessageDetails["id"],
     data: MessageDetails["data"]
 }) {
-    const _messages = bStore.use.messages();
-
     switch (props.id) {
     case 'internalMessage':
         const d = props.data as Message;
@@ -251,97 +202,34 @@ function MessageContent(props: {
                 <p>{d.message}</p>
             </div>
         );
-    case 'airisBeacon':
-        const beacon = props.data as Beacon;
+    case 'scalarEvent':
+        const evr = props.data as ScalarEventRecord;
+
+        const fields: [string, string][] = [
+            ["Event", evr.name],
+            ["Severity", evr.severity],
+            ["Message", evr.message],
+            ["Event ID", String(evr.id)],
+            ["Spacecraft time (UTC)", formatScalarTime(evr.time)],
+        ];
 
         return (
-            <div className="flex flex-row gap-4">
-                <div className="p-2 ml-1.5 pl-4 border-l-2">
-                    <h2 className="font-semibold text-2xl">Telemetry Beacon</h2>
-                    <p className="text-foreground/80">All top-level sensor data and statement of health information</p>
-
-                    <ResponsiveLine
-                        data={getValues(_messages, props.id, props.data, "batVoltage")}
-                        margin={{
-                            top: 50,
-                            right: 110,
-                            bottom: 50,
-                            left: 60
-                        }}
-                        yScale={{ type: 'linear', min: 'auto', max: 'auto', stacked: true, reverse: false }}
-                        axisBottom={{ legend: 'transportation', legendOffset: 36 }}
-                        axisLeft={{ legend: 'count', legendOffset: -40 }}
-                        pointSize={10}
-                        pointColor={{ theme: 'background' }}
-                        pointBorderWidth={2}
-                        pointBorderColor={{ from: 'seriesColor' }}
-                        pointLabelYOffset={-12}
-                        enableTouchCrosshair={true}
-                        useMesh={true}
-                        legends={[
-                            {
-                                anchor: 'bottom-right',
-                                direction: 'column',
-                                translateX: 100,
-                                itemWidth: 80,
-                                itemHeight: 22,
-                                symbolShape: 'circle'
-                            }
-                        ]}
-                    />
-                </div>
-                <div className="flex flex-row">
-                    <div className="text-wrap  py-2 grid grid-cols-[min-content_min-content_min-content] divide-y">
-                        {Object.keys(beacon).map((k, i) => i != 0 ? (
-                            <React.Fragment key={i}>
-                                <p className="capitalize font-mono pt-1 px-2 text-foreground/80">{String(k)}</p>
-                                <div className="flex flex-row items-center border-b">
-                                    <ArrowUp className="text-green-500 w-4 h-4" />
-                                </div>
-                                <div className="group flex flex-row items-center border-b">
-                                    <p className="pt-1 px-2 pr-5 text-nowrap">{String(formatValue(beacon[k as keyof Beacon]))}</p>
-                                    <Copy
-                                        className="opacity-0 group-hover:opacity-100 w-4 h-4 cursor-pointer hover:text-foreground/80"
-                                        onClick={() => {
-                                            navigator.clipboard.writeText(`${k}: ${String(formatValue(beacon[k as keyof Beacon]))}`)
-                                        }}
-                                    />
-                                </div>
-                            </React.Fragment>
-                        ) : (<React.Fragment key={i} />))}
-                    </div>
-                    <div className="flex flex-col">
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button variant="ghost">
-                                    <Download className="w-4 h-4 text-foreground/80"/>
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="right">
-                                Download as CSV
-                            </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button variant="ghost">
-                                    <Copy className="w-4 h-4 text-foreground/80"/>
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="right">
-                                Copy table to clipboard
-                            </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button variant="ghost">
-                                    <ExternalLink className="w-4 h-4 text-foreground/80"/>
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="right">
-                                Open table in new tab
-                            </TooltipContent>
-                        </Tooltip>
-                    </div>
+            <div className="text-wrap ml-1.5 pl-4 border-l-2 py-2">
+                <h4 className={cn("font-semibold", severityColor(evr.severity))}>{evr.name}</h4>
+                <p className="text-foreground/80 pb-2">SCALAR event record (F&apos; EVR via gds-bridge)</p>
+                <div className="grid grid-cols-[max-content_max-content] gap-x-6 divide-y">
+                    {fields.map(([label, value]) => (
+                        <React.Fragment key={label}>
+                            <p className="font-mono pt-1 text-foreground/80">{label}</p>
+                            <div className="group flex flex-row items-center border-b">
+                                <p className="pt-1 pr-5 text-nowrap">{value}</p>
+                                <Copy
+                                    className="opacity-0 group-hover:opacity-100 w-4 h-4 cursor-pointer hover:text-foreground/80"
+                                    onClick={() => navigator.clipboard.writeText(`${label}: ${value}`)}
+                                />
+                            </div>
+                        </React.Fragment>
+                    ))}
                 </div>
             </div>
         )
@@ -398,22 +286,49 @@ export default function DataView() {
 
     const [navigating, setNavigating] = React.useState(false);
 
-    const [data, setData] = React.useState<MessageDetails[]>([]);
+    const [messages, setMessages] = React.useState<MessageDetails[]>(() => bStore.getState().messages);
+    const [events, setEvents] = React.useState<ScalarEventRecord[]>(() => bStore.getState().scalarEvents);
 
     // Avoid unnecessary component rerenders by unsubscribing from data stream
     // when navigation is active
     React.useEffect(() => {
         if (navigating) return;
 
-        const unsub = bStore.subscribe(
+        setMessages(bStore.getState().messages);
+        setEvents(bStore.getState().scalarEvents);
+
+        const unsubMessages = bStore.subscribe(
             (state) => state.messages,
             (messages) => {
-                setData(messages);
+                setMessages(messages);
             }
         );
 
-        return unsub; 
+        const unsubEvents = bStore.subscribe(
+            (state) => state.scalarEvents,
+            (scalarEvents) => {
+                setEvents(scalarEvents);
+            }
+        );
+
+        return () => {
+            unsubMessages();
+            unsubEvents();
+        };
     }, [navigating]);
+
+    const data = React.useMemo(() => {
+        const eventRows: MessageDetails[] = events.map((e) => ({
+            timestamp: e.time !== null && Number.isFinite(e.time) ? new Date(e.time * 1000) : new Date(),
+            id: "scalarEvent" as const,
+            group: "scalar",
+            data: e
+        }));
+
+        return [...messages, ...eventRows].sort(
+            (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+        );
+    }, [messages, events]);
 
     console.log("Data view rerender");
 

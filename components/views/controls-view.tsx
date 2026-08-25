@@ -1294,7 +1294,11 @@ function SceneWrapper() {
     const { activeProject, saveActiveConfig } = useProject();
     const configured = activeProject?.configured ?? false;
     const config = useMemo(() => ({ ...DEFAULT_ADCS_CONFIG, ...(activeProject?.config ?? {}) }), [activeProject?.config]);
-    const live = config.live;
+    const simStatus = bStore.use.simStatus();
+    // Readouts bind to whatever is actually on the link: a real mission session
+    // or an active simulation. config.live stays "a real GDS session is up", so
+    // it can keep gating the simulation controls without also blanking the panel.
+    const live = config.live || !!simStatus?.active;
 
     const channels = bStore.use.scalarChannels();
     const { satrec, name: tleName, status: tleStatus, error: tleError } = useTle(config);

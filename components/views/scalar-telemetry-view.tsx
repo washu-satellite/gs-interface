@@ -5,24 +5,9 @@ import * as React from "react";
 import { bStore } from "@/hooks/useAppStore";
 import { ScalarChannelSample, ScalarEventRecord } from "@/types/scalar";
 import { cn } from "@/lib/utils";
+import { formatScalarTime as formatTime, severityColor } from "@/lib/scalar-severity";
 
 const EVENT_DISPLAY_LIMIT = 100;
-
-function formatTime(epochSeconds: number | null): string {
-    if (epochSeconds === null || !Number.isFinite(epochSeconds))
-        return "--:--:--";
-    const d = new Date(epochSeconds * 1000);
-    if (isNaN(d.getTime()))
-        return "--:--:--";
-    return d.toISOString().slice(11, 23);
-}
-
-function severityColor(severity: string): string {
-    if (severity.includes("FATAL")) return "text-red-500";
-    if (severity.includes("WARNING")) return "text-amber-500";
-    if (severity.includes("COMMAND")) return "text-blue-500";
-    return "text-muted-foreground";
-}
 
 function ChannelTable(props: { channels: Record<string, ScalarChannelSample> }) {
     const rows = Object.values(props.channels).sort((a, b) => a.name.localeCompare(b.name));

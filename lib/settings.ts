@@ -10,6 +10,7 @@ export type Settings = {
     notifyWarning: boolean;
     notifyCritical: boolean;
     desktopNotifications: boolean;
+    alertOnTelemetryEvents: boolean;
     notificationSound: boolean;
     units: UnitSystem;
     timeDisplay: TimeDisplay;
@@ -24,6 +25,7 @@ export const DEFAULT_SETTINGS: Settings = {
     notifyWarning: true,
     notifyCritical: true,
     desktopNotifications: false,
+    alertOnTelemetryEvents: true,
     notificationSound: false,
     units: "metric",
     timeDisplay: "utc",

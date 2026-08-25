@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { ArrowUp, Bell, CalendarDays, Check, ChevronDown, Command, Cross, Database, ExternalLink, LogOut, Moon, PanelRightClose, PanelRightOpen, PanelTopClose, PanelTopOpen, Plus, Pyramid, RadioTower, RefreshCcw, Satellite, Settings, SidebarClose, SidebarOpen, SquareTerminal, Sun, Triangle, TriangleAlert, User, X } from "lucide-react";
+import { ArrowUp, Bell, CalendarDays, Check, ChevronDown, Command, Cross, Database, ExternalLink, FlaskConical, LogOut, Moon, PanelRightClose, PanelRightOpen, PanelTopClose, PanelTopOpen, Plus, Pyramid, Radio, RadioTower, RefreshCcw, Satellite, Settings, SidebarClose, SidebarOpen, SquareTerminal, Sun, Triangle, TriangleAlert, User, X } from "lucide-react";
 import { ViewIcon } from "@/lib/view-icons";
 import { redirect, useRouter } from "next/navigation";
 import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -21,9 +21,14 @@ import CDHView from "@/components/views/cdh-view";
 import DataView from "@/components/views/data-view";
 import ScalarTelemetryView from "@/components/views/scalar-telemetry-view";
 import CalendarView from "@/components/views/calendar-view";
+import SimulationView from "@/components/views/simulation-view";
+import ScalarCommandView from "@/components/views/scalar-command-view";
 import { SidebarContent, SidebarFooter, SidebarGroup, SidebarHeader, SidebarProvider } from "@/components/ui/sidebar";
 import { ProjectProvider, useProject } from "@/components/project-context";
 import { useSettings } from "@/lib/settings";
+import { playNotificationSound } from "@/lib/notification-sound";
+import { useScalarEventAlerts } from "@/hooks/useScalarEventAlerts";
+import { useSimStatusPoller } from "@/hooks/useSimStatus";
 import { rememberView } from "@/lib/last-view";
 import { CustomDashboardView, MopsEditor } from "@/components/views/custom-dashboard-view";
 import { MoreVertical, Pencil, Trash2 } from "lucide-react";
@@ -64,6 +69,18 @@ const navElms: NavTileType[] = [
         title: "SCALAR",
         description: "SCALAR telemetry and events via F' GDS",
         id: "scalar"
+    },
+    {
+        icon: <Radio className="w-4"/>,
+        title: "Uplink",
+        description: "Send F' commands to SCALAR from the live GDS dictionary",
+        id: "uplink"
+    },
+    {
+        icon: <FlaskConical className="w-4"/>,
+        title: "Sim",
+        description: "Run telemetry & incident simulations against the SCALAR pipeline",
+        id: "sim"
     },
     {
         icon: <CalendarDays className="w-4"/>,
@@ -365,6 +382,26 @@ function ViewContent(props: {
                     </ViewHeader>
                 </SingleViewWrapper>
             );
+        case "uplink":
+            return (
+                <SingleViewWrapper>
+                    <ViewHeader title="SCALAR Uplink" viewKey="uplink">
+                        <div className="flex-1 p-4 min-h-0 relative">
+                            <ScalarCommandView />
+                        </div>
+                    </ViewHeader>
+                </SingleViewWrapper>
+            );
+        case "sim":
+            return (
+                <SingleViewWrapper>
+                    <ViewHeader title="SCALAR Simulations" viewKey="sim">
+                        <div className="flex-1 p-4 min-h-0">
+                            <SimulationView />
+                        </div>
+                    </ViewHeader>
+                </SingleViewWrapper>
+            );
         default:
             return <h1 className="text-center">Unknown view</h1>;
     }
@@ -425,35 +462,22 @@ function ModeTrigger({ live }: { live: boolean }) {
     )
 }
 
-function playNotificationSound() {
-    try {
-        const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        const ctx = new Ctx();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = "sine";
-        osc.frequency.value = 880;
-        gain.gain.setValueAtTime(0.06, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.25);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.26);
-        osc.onended = () => ctx.close();
-    } catch {}
-}
-
 function Heading() {
     const _setTheme = bStore.use.setTheme();
     const _theme = bStore.use.theme();
     const { projects, activeProject, setActiveId, notifications, markNotificationRead, clearNotifications } = useProject();
     const router = useRouter();
     const [settings] = useSettings();
+    const connected = bStore.use.connected();
     const live = !!activeProject?.config?.live;
+
+    useScalarEventAlerts();
+    useSimStatusPoller();
+    const simStatus = bStore.use.simStatus();
 
     const visibleNotifications = notifications.filter((n) =>
         n.level === "critical"
-            ? true
+            ? live || settings.notifyCritical
             : n.level === "warning"
               ? settings.notifyWarning
               : settings.notifyInfo
@@ -468,14 +492,15 @@ function Heading() {
         const fresh = notifications.filter((n) => !seenNotifications.current!.has(n.id));
         for (const n of fresh) seenNotifications.current!.add(n.id);
         const relevant = fresh.filter((n) =>
-            n.level === "critical" ? true : n.level === "warning" ? settings.notifyWarning : settings.notifyInfo
+            (n.level === "critical" ? live || settings.notifyCritical : n.level === "warning" ? settings.notifyWarning : settings.notifyInfo)
+            && Date.now() - new Date(n.createdAt).getTime() < 30000
         );
         if (relevant.length === 0) return;
         if (settings.desktopNotifications && typeof Notification !== "undefined" && Notification.permission === "granted") {
             for (const n of relevant) new Notification(n.title, { body: n.message ?? undefined });
         }
         if (settings.notificationSound) playNotificationSound();
-    }, [notifications, settings.desktopNotifications, settings.notificationSound, settings.notifyWarning, settings.notifyInfo]);
+    }, [notifications, live, settings.desktopNotifications, settings.notificationSound, settings.notifyWarning, settings.notifyInfo, settings.notifyCritical]);
 
     return (
         <div className="sticky top-0 z-50">
@@ -504,7 +529,20 @@ function Heading() {
                             </DropdownMenuGroup>
                         </DropdownMenuContent>
                     </DropdownMenu>
-                    <ModeTrigger live={live} />
+                    <ModeTrigger live={connected} />
+                    {simStatus?.active && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <div className="flex flex-row items-center gap-1.5 rounded-full border border-amber-500/50 bg-amber-500/10 px-2.5 py-1 text-amber-500 cursor-default">
+                                    <FlaskConical className="w-3.5 h-3.5" />
+                                    <span className="text-xs font-semibold uppercase tracking-wide">Sim</span>
+                                </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom">
+                                Simulated telemetry is on the link — this is not real flight data.
+                            </TooltipContent>
+                        </Tooltip>
+                    )}
                 </div>
                 <div className="flex-row items-end gap-10 py-2 text-foreground/90 hidden lg:flex">
                     <StatField title="Next Pass" value={live ? "T-00:54:02" : "--"}/>
@@ -688,7 +726,7 @@ function Sidebar(props: {
 
     const items: NavItem[] = useMemo(() => [
         ...navElms
-            .filter((n) => n.id !== "scalar" || activeId === "scalar")
+            .filter((n) => !["scalar", "sim", "uplink"].includes(n.id) || activeId === "scalar")
             .map((n) => ({ key: n.id, title: n.title, icon: n.icon, custom: false })),
         ...views.map((v) => ({ key: `custom-${v.id}`, title: v.name, icon: <ViewIcon icon={v.icon} className="w-4" />, custom: true, viewId: v.id })),
     ], [views, activeId]);

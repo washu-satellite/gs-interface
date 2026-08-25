@@ -1,9 +1,13 @@
 import { db, ensureViewSchema } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
+import { requireSession } from "@/lib/api-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const { response: unauth } = await requireSession();
+    if (unauth) return unauth;
+
     const { id } = await params;
     await ensureViewSchema();
     const { rows } = await db.query(
@@ -14,6 +18,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const { response: unauth } = await requireSession();
+    if (unauth) return unauth;
+
     const { id } = await params;
     const body = await req.json();
     const order: number[] = Array.isArray(body.order) ? body.order : [];
@@ -26,6 +33,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const { response: unauth } = await requireSession();
+    if (unauth) return unauth;
+
     const { id } = await params;
     await ensureViewSchema();
     const body = await req.json();

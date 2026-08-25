@@ -1,5 +1,6 @@
 import { MessageEnvelope } from '@/gen/messages/transport/v1/transport_pb';
 import { ScalarChannelSample, ScalarEventRecord, ScalarMessage } from '@/types/scalar';
+import { SimEngineState, SimStatus } from '@/types/sim';
 import { Message } from '@bufbuild/protobuf';
 import { Centrifuge, Subscription } from 'centrifuge/build/protobuf';
 import { channel } from 'diagnostics_channel';
@@ -10,14 +11,15 @@ import { createAuthClient } from 'better-auth/react';
 
 export type MessageDetails = {
   timestamp: Date,
-  id: MessageEnvelope["messageBody"]["case"],
-  data: Message<any>,
+  id: MessageEnvelope["messageBody"]["case"] | "scalarEvent",
+  data: Message<any> | ScalarEventRecord,
   group: string
 };
 
 // Contains all data for managing Centrifuge socket comms
 type SocketStore = {
     client: Centrifuge | null;
+    connected: boolean;
     clientId: string;
     subscriptions: Map<string, Subscription>;
     messages: MessageDetails[];
@@ -26,31 +28,40 @@ type SocketStore = {
     scalarChannels: Record<string, ScalarChannelSample>;
     scalarEvents: (ScalarEventRecord & { seq: number })[];
     openChannels: string[];
+    simStatus: SimStatus | null;
+    simEngine: SimEngineState;
 
     setClient: (c: Centrifuge) => void;
+    setConnected: (connected: boolean) => void;
     setClientId: (id: string) => void;
     subscribe: (channel: string, sub: Subscription) => void;
     addMessage: (envelope: MessageEnvelope) => void;
     addScalarMessage: (message: ScalarMessage) => void;
     addChannel: (channel: string) => void;
     removeChannel: (channel: string) => void;
+    setSimStatus: (status: SimStatus | null, engine: SimEngineState) => void;
 }
 
 const SCALAR_EVENT_LIMIT = 1000;
+const MESSAGE_LIMIT = 1000;
 
 // stable React keys for events, which have no unique wire-level id
 let scalarEventSeq = 0;
 
 const createSocketStore: StateCreator<SocketStore, [], []> = (set) => ({
     client: null,
+    connected: false,
     clientId: "",
     subscriptions: new Map<string, Subscription>(),
     messages: [],
     scalarChannels: {},
     scalarEvents: [],
     openChannels: [],
+    simStatus: null,
+    simEngine: "loading",
 
     setClient: (c) => set(() => ({ client: c })),
+    setConnected: (connected) => set(() => ({ connected })),
     setClientId: (id) => set(() => ({ clientId: id })),
     subscribe: (channel, sub) => set(d => {
       d.subscriptions.set(channel, sub);
@@ -69,7 +80,7 @@ const createSocketStore: StateCreator<SocketStore, [], []> = (set) => ({
         data: envelope.messageBody.value
       };
 
-      return ({ messages: [...state.messages, details] });
+      return ({ messages: [...state.messages, details].slice(-MESSAGE_LIMIT) });
     }),
     addScalarMessage: (message) => set((state) => {
       if (message.kind === 'channel')
@@ -82,7 +93,8 @@ const createSocketStore: StateCreator<SocketStore, [], []> = (set) => ({
       return {};
     }),
     addChannel: (channel) => set((state) => ({ openChannels: [...state.openChannels, channel] })),
-    removeChannel: (channel) => set((state) => ({ openChannels: state.openChannels.filter(c => c !== channel) }))
+    removeChannel: (channel) => set((state) => ({ openChannels: state.openChannels.filter(c => c !== channel) })),
+    setSimStatus: (simStatus, simEngine) => set(() => ({ simStatus, simEngine }))
 });
 
 type UserData = {

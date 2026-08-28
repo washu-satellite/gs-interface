@@ -40,3 +40,41 @@ export type ScalarDictionary = {
     channels: { name: string, id: number, description: string | null }[],
     events: { name: string, id: number, severity: string }[]
 };
+
+export type DelayBlockConfig = { seconds: number };
+
+export type WaitEventBlockConfig = { eventName: string; timeoutSec: number };
+
+export type QueueItemStatus = "queued" | "sending" | "error";
+
+type QueuedItemBase = {
+    id: number,
+    projectId: string,
+    ord: number,
+    status: QueueItemStatus,
+    error: string | null,
+    queuedBy: string,
+    queuedByName: string | null,
+    createdAt: string
+};
+
+export type QueuedCommandItem = QueuedItemBase & {
+    kind: "command",
+    mnemonic: string,
+    args: string[]
+};
+
+export type QueuedBlockItem = QueuedItemBase & {
+    kind: "block",
+    blockType: "delay" | "wait_event",
+    blockConfig: DelayBlockConfig | WaitEventBlockConfig
+};
+
+export type QueuedItem = QueuedCommandItem | QueuedBlockItem;
+
+export type ScalarLinkStatus = "ok" | "stale" | "no_data_yet" | "unreachable" | "unconfigured";
+
+export type ScalarBridgeHealth = {
+    status: ScalarLinkStatus;
+    secondsSinceLastData: number | null;
+};

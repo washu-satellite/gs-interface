@@ -29,9 +29,11 @@ import { useSettings } from "@/lib/settings";
 import { playNotificationSound } from "@/lib/notification-sound";
 import { useScalarEventAlerts } from "@/hooks/useScalarEventAlerts";
 import { useSimStatusPoller } from "@/hooks/useSimStatus";
+import { useScalarBridgeHealthPoller } from "@/hooks/useScalarBridgeHealth";
 import { rememberView } from "@/lib/last-view";
 import { CustomDashboardView, MopsEditor } from "@/components/views/custom-dashboard-view";
-import { MoreVertical, Pencil, Trash2 } from "lucide-react";
+import CommandQueueView from "@/components/views/command-queue-view";
+import { MoreVertical, Pencil, Trash2, ListOrdered } from "lucide-react";
 
 type NavTileType = {
     icon: ReactNode,
@@ -75,6 +77,12 @@ const navElms: NavTileType[] = [
         title: "Uplink",
         description: "Send F' commands to SCALAR from the live GDS dictionary",
         id: "uplink"
+    },
+    {
+        icon: <ListOrdered className="w-4"/>,
+        title: "Queue",
+        description: "Commands queued for send, in FIFO order — nothing here has been uplinked yet",
+        id: "queue"
     },
     {
         icon: <FlaskConical className="w-4"/>,
@@ -392,6 +400,16 @@ function ViewContent(props: {
                     </ViewHeader>
                 </SingleViewWrapper>
             );
+        case "queue":
+            return (
+                <SingleViewWrapper>
+                    <ViewHeader title="Command Queue" viewKey="queue">
+                        <div className="flex-1 p-4 min-h-0 relative">
+                            <CommandQueueView />
+                        </div>
+                    </ViewHeader>
+                </SingleViewWrapper>
+            );
         case "sim":
             return (
                 <SingleViewWrapper>
@@ -473,7 +491,9 @@ function Heading() {
 
     useScalarEventAlerts();
     useSimStatusPoller();
+    useScalarBridgeHealthPoller();
     const simStatus = bStore.use.simStatus();
+    const bridgeHealth = bStore.use.bridgeHealth();
 
     const visibleNotifications = notifications.filter((n) =>
         n.level === "critical"
@@ -530,6 +550,40 @@ function Heading() {
                         </DropdownMenuContent>
                     </DropdownMenu>
                     <ModeTrigger live={connected} />
+                    {activeProject?.id === "scalar" && bridgeHealth && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <div
+                                    className={cn(
+                                        "flex flex-row items-center gap-1.5 rounded-full border px-2.5 py-1 cursor-default",
+                                        bridgeHealth.status === "ok"
+                                            ? "border-green-600/50 bg-green-600/10 text-green-500"
+                                            : bridgeHealth.status === "stale"
+                                              ? "border-amber-500/50 bg-amber-500/10 text-amber-500"
+                                              : "border-red-500/50 bg-red-950/30 text-red-400"
+                                    )}
+                                >
+                                    <Radio className="w-3.5 h-3.5" />
+                                    <span className="text-xs font-semibold uppercase tracking-wide">
+                                        {bridgeHealth.status === "ok" && "GDS Link"}
+                                        {bridgeHealth.status === "stale" && "GDS Stale"}
+                                        {bridgeHealth.status === "no_data_yet" && "GDS: No Data"}
+                                        {bridgeHealth.status === "unconfigured" && "GDS Unconfigured"}
+                                        {bridgeHealth.status === "unreachable" && "GDS Unreachable"}
+                                    </span>
+                                </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom">
+                                {bridgeHealth.status === "unconfigured" && "GDS_BRIDGE_URL is not set on the interface."}
+                                {bridgeHealth.status === "unreachable" && "gds-bridge is not responding to health checks."}
+                                {bridgeHealth.status === "no_data_yet" && "gds-bridge is up but hasn't received anything from F' GDS yet."}
+                                {bridgeHealth.status === "ok" &&
+                                    `Receiving data from F' GDS (last message ${Math.round(bridgeHealth.secondsSinceLastData ?? 0)}s ago).`}
+                                {bridgeHealth.status === "stale" &&
+                                    `No data from F' GDS for ${Math.round(bridgeHealth.secondsSinceLastData ?? 0)}s - the link may be down even though gds-bridge itself is still running.`}
+                            </TooltipContent>
+                        </Tooltip>
+                    )}
                     {simStatus?.active && (
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -726,7 +780,7 @@ function Sidebar(props: {
 
     const items: NavItem[] = useMemo(() => [
         ...navElms
-            .filter((n) => !["scalar", "sim", "uplink"].includes(n.id) || activeId === "scalar")
+            .filter((n) => !["scalar", "sim", "uplink", "queue"].includes(n.id) || activeId === "scalar")
             .map((n) => ({ key: n.id, title: n.title, icon: n.icon, custom: false })),
         ...views.map((v) => ({ key: `custom-${v.id}`, title: v.name, icon: <ViewIcon icon={v.icon} className="w-4" />, custom: true, viewId: v.id })),
     ], [views, activeId]);

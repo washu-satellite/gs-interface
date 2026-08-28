@@ -51,3 +51,54 @@ export function ensureCalendarSchema(): Promise<void> {
     }
     return calendarSchemaReady;
 }
+
+let commandQueueSchemaReady: Promise<void> | null = null;
+
+export function ensureCommandQueueSchema(): Promise<void> {
+    if (!commandQueueSchemaReady) {
+        commandQueueSchemaReady = db
+            .query(
+                `CREATE TABLE IF NOT EXISTS command_queue (
+                    id serial PRIMARY KEY,
+                    "projectId" text NOT NULL,
+                    mnemonic text NOT NULL,
+                    args jsonb NOT NULL DEFAULT '[]',
+                    "queuedBy" text NOT NULL,
+                    "queuedByName" text,
+                    "createdAt" timestamptz NOT NULL DEFAULT now()
+                )`
+            )
+            .then(() => db.query(
+                `ALTER TABLE command_queue
+                    ALTER COLUMN mnemonic DROP NOT NULL,
+                    ALTER COLUMN args DROP NOT NULL,
+                    ADD COLUMN IF NOT EXISTS ord integer NOT NULL DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'command',
+                    ADD COLUMN IF NOT EXISTS "blockType" text,
+                    ADD COLUMN IF NOT EXISTS "blockConfig" jsonb,
+                    ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'queued',
+                    ADD COLUMN IF NOT EXISTS error text`
+            ))
+            .then(() => {})
+            .catch(() => { commandQueueSchemaReady = null; });
+    }
+    return commandQueueSchemaReady;
+}
+
+let commandQueueSettingsSchemaReady: Promise<void> | null = null;
+
+export function ensureCommandQueueSettingsSchema(): Promise<void> {
+    if (!commandQueueSettingsSchemaReady) {
+        commandQueueSettingsSchemaReady = db
+            .query(
+                `CREATE TABLE IF NOT EXISTS command_queue_settings (
+                    "projectId" text PRIMARY KEY,
+                    "autoRelease" boolean NOT NULL DEFAULT false,
+                    "updatedAt" timestamptz NOT NULL DEFAULT now()
+                )`
+            )
+            .then(() => {})
+            .catch(() => { commandQueueSettingsSchemaReady = null; });
+    }
+    return commandQueueSettingsSchemaReady;
+}

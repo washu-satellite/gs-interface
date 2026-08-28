@@ -1,5 +1,5 @@
 import { MessageEnvelope } from '@/gen/messages/transport/v1/transport_pb';
-import { ScalarChannelSample, ScalarEventRecord, ScalarMessage } from '@/types/scalar';
+import { ScalarBridgeHealth, ScalarChannelSample, ScalarEventRecord, ScalarMessage } from '@/types/scalar';
 import { SimEngineState, SimStatus } from '@/types/sim';
 import { Message } from '@bufbuild/protobuf';
 import { Centrifuge, Subscription } from 'centrifuge/build/protobuf';
@@ -30,6 +30,7 @@ type SocketStore = {
     openChannels: string[];
     simStatus: SimStatus | null;
     simEngine: SimEngineState;
+    bridgeHealth: ScalarBridgeHealth | null;
 
     setClient: (c: Centrifuge) => void;
     setConnected: (connected: boolean) => void;
@@ -40,6 +41,7 @@ type SocketStore = {
     addChannel: (channel: string) => void;
     removeChannel: (channel: string) => void;
     setSimStatus: (status: SimStatus | null, engine: SimEngineState) => void;
+    setBridgeHealth: (health: ScalarBridgeHealth | null) => void;
 }
 
 const SCALAR_EVENT_LIMIT = 1000;
@@ -59,6 +61,7 @@ const createSocketStore: StateCreator<SocketStore, [], []> = (set) => ({
     openChannels: [],
     simStatus: null,
     simEngine: "loading",
+    bridgeHealth: null,
 
     setClient: (c) => set(() => ({ client: c })),
     setConnected: (connected) => set(() => ({ connected })),
@@ -94,7 +97,8 @@ const createSocketStore: StateCreator<SocketStore, [], []> = (set) => ({
     }),
     addChannel: (channel) => set((state) => ({ openChannels: [...state.openChannels, channel] })),
     removeChannel: (channel) => set((state) => ({ openChannels: state.openChannels.filter(c => c !== channel) })),
-    setSimStatus: (simStatus, simEngine) => set(() => ({ simStatus, simEngine }))
+    setSimStatus: (simStatus, simEngine) => set(() => ({ simStatus, simEngine })),
+    setBridgeHealth: (bridgeHealth) => set(() => ({ bridgeHealth }))
 });
 
 type UserData = {

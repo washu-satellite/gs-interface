@@ -1,9 +1,19 @@
 import { Pool } from "pg";
+import { DEFAULT_ADCS_CONFIG } from "@/lib/projects";
+
+function needsSsl(connectionString: string): boolean {
+    try {
+        const mode = new URL(connectionString).searchParams.get("sslmode");
+        return mode === "require" || mode === "verify-ca" || mode === "verify-full";
+    } catch {
+        return false;
+    }
+}
 
 function createPool() {
     const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
     return connectionString
-        ? new Pool({ connectionString, ssl: { rejectUnauthorized: false } })
+        ? new Pool({ connectionString, ssl: needsSsl(connectionString) ? { rejectUnauthorized: false } : undefined })
         : new Pool({
             user: "postgres",
             host: "localhost",
@@ -22,11 +32,42 @@ let viewSchemaReady: Promise<void> | null = null;
 export function ensureViewSchema(): Promise<void> {
     if (!viewSchemaReady) {
         viewSchemaReady = db
-            .query("ALTER TABLE dashboard_view ADD COLUMN IF NOT EXISTS icon text DEFAULT 'grid'")
+            .query(
+                `CREATE TABLE IF NOT EXISTS dashboard_view (
+                    id serial PRIMARY KEY,
+                    "projectId" text NOT NULL,
+                    name text NOT NULL,
+                    blocks jsonb NOT NULL DEFAULT '[]',
+                    ord integer NOT NULL DEFAULT 0
+                )`
+            )
+            .then(() => db.query("ALTER TABLE dashboard_view ADD COLUMN IF NOT EXISTS icon text DEFAULT 'grid'"))
             .then(() => {})
             .catch(() => { viewSchemaReady = null; });
     }
     return viewSchemaReady;
+}
+
+let notificationSchemaReady: Promise<void> | null = null;
+
+export function ensureNotificationSchema(): Promise<void> {
+    if (!notificationSchemaReady) {
+        notificationSchemaReady = db
+            .query(
+                `CREATE TABLE IF NOT EXISTS notification (
+                    id serial PRIMARY KEY,
+                    "projectId" text NOT NULL,
+                    level text NOT NULL DEFAULT 'info',
+                    title text NOT NULL,
+                    message text,
+                    read boolean NOT NULL DEFAULT false,
+                    "createdAt" timestamptz NOT NULL DEFAULT now()
+                )`
+            )
+            .then(() => {})
+            .catch(() => { notificationSchemaReady = null; });
+    }
+    return notificationSchemaReady;
 }
 
 let calendarSchemaReady: Promise<void> | null = null;
@@ -46,6 +87,9 @@ export function ensureCalendarSchema(): Promise<void> {
                     detail text
                 )`
             )
+            .then(() => db.query(
+                `ALTER TABLE calendar_event ADD COLUMN IF NOT EXISTS source text NOT NULL DEFAULT 'manual'`
+            ))
             .then(() => {})
             .catch(() => { calendarSchemaReady = null; });
     }
@@ -83,6 +127,33 @@ export function ensureCommandQueueSchema(): Promise<void> {
             .catch(() => { commandQueueSchemaReady = null; });
     }
     return commandQueueSchemaReady;
+}
+
+let projectSchemaReady: Promise<void> | null = null;
+
+export function ensureProjectSchema(): Promise<void> {
+    if (!projectSchemaReady) {
+        projectSchemaReady = db
+            .query(
+                `CREATE TABLE IF NOT EXISTS project (
+                    id text PRIMARY KEY,
+                    name text NOT NULL,
+                    ord integer NOT NULL DEFAULT 0,
+                    config jsonb NOT NULL DEFAULT '{}',
+                    configured boolean NOT NULL DEFAULT false,
+                    "updatedAt" timestamptz NOT NULL DEFAULT now()
+                )`
+            )
+            .then(() => db.query(
+                `INSERT INTO project (id, name, ord, config, configured)
+                 SELECT 'scalar', 'SCALAR', 0, $1, false
+                 WHERE NOT EXISTS (SELECT 1 FROM project)`,
+                [JSON.stringify(DEFAULT_ADCS_CONFIG)]
+            ))
+            .then(() => {})
+            .catch(() => { projectSchemaReady = null; });
+    }
+    return projectSchemaReady;
 }
 
 let commandQueueSettingsSchemaReady: Promise<void> | null = null;

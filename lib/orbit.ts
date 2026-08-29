@@ -3,6 +3,8 @@ import {
     propagate,
     gstime,
     eciToGeodetic,
+    eciToEcf,
+    ecfToLookAngles,
     degreesLat,
     degreesLong,
     type SatRec,
@@ -49,4 +51,55 @@ export function groundTrack(rec: SatRec, from: Date, spanMin: number, samples: n
         if (s) pts.push({ lat: s.lat, lon: s.lon, altKm: s.altKm });
     }
     return pts;
+}
+
+export type Observer = { latDeg: number; lonDeg: number; altKm: number };
+export type PassWindow = { start: Date; end: Date; maxElevationDeg: number };
+
+function elevationDeg(rec: SatRec, date: Date, observerGd: { latitude: number; longitude: number; height: number }): number | null {
+    const pv = propagate(rec, date);
+    if (!pv || !pv.position || typeof pv.position === "boolean") return null;
+    const gmst = gstime(date);
+    const ecf = eciToEcf(pv.position, gmst);
+    const look = ecfToLookAngles(observerGd, ecf);
+    return look.elevation * (180 / Math.PI);
+}
+
+export function computePasses(
+    rec: SatRec,
+    observer: Observer,
+    from: Date,
+    to: Date,
+    minElevationDeg = 10,
+    stepSeconds = 30
+): PassWindow[] {
+    const observerGd = {
+        latitude: observer.latDeg * (Math.PI / 180),
+        longitude: observer.lonDeg * (Math.PI / 180),
+        height: observer.altKm,
+    };
+
+    const passes: PassWindow[] = [];
+    let current: { start: Date; maxElevDeg: number } | null = null;
+
+    for (let t = from.getTime(); t <= to.getTime(); t += stepSeconds * 1000) {
+        const date = new Date(t);
+        const elev = elevationDeg(rec, date, observerGd);
+        if (elev === null) continue;
+
+        if (elev >= minElevationDeg) {
+            if (!current) {
+                current = { start: date, maxElevDeg: elev };
+            } else if (elev > current.maxElevDeg) {
+                current.maxElevDeg = elev;
+            }
+        } else if (current) {
+            passes.push({ start: current.start, end: date, maxElevationDeg: current.maxElevDeg });
+            current = null;
+        }
+    }
+    if (current) {
+        passes.push({ start: current.start, end: to, maxElevationDeg: current.maxElevDeg });
+    }
+    return passes;
 }

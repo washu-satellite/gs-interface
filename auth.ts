@@ -4,11 +4,22 @@ import { Pool } from "pg";
 
 // Use a cloud database when a connection string is provided (e.g. Neon on
 // Vercel, injected as DATABASE_URL / POSTGRES_URL). Cloud Postgres requires
-// SSL. Fall back to the local Docker Postgres for development.
+// SSL; a self-hosted Postgres (e.g. the docker-compose one) generally doesn't,
+// so SSL is only forced when the connection string itself asks for it.
+// Fall back to the local Docker Postgres for development.
 const connectionString = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
 
+function needsSsl(cs: string): boolean {
+    try {
+        const mode = new URL(cs).searchParams.get("sslmode");
+        return mode === "require" || mode === "verify-ca" || mode === "verify-full";
+    } catch {
+        return false;
+    }
+}
+
 const pool = connectionString
-    ? new Pool({ connectionString, ssl: { rejectUnauthorized: false } })
+    ? new Pool({ connectionString, ssl: needsSsl(connectionString) ? { rejectUnauthorized: false } : undefined })
     : new Pool({
         user: "postgres",
         host: "localhost",

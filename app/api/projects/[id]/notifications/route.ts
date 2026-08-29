@@ -1,4 +1,4 @@
-import { db } from "@/lib/db";
+import { db, ensureNotificationSchema } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/api-auth";
 
@@ -9,6 +9,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     if (unauth) return unauth;
 
     const { id } = await params;
+    await ensureNotificationSchema();
     const { rows } = await db.query(
         'SELECT id, "projectId", level, title, message, "createdAt" FROM notification WHERE "projectId" = $1 AND read = false ORDER BY "createdAt" DESC',
         [id]
@@ -21,6 +22,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (unauth) return unauth;
 
     const { id } = await params;
+    await ensureNotificationSchema();
     const body = await req.json().catch(() => ({}));
     const level: string = ["info", "warning", "critical"].includes(body?.level) ? body.level : "info";
     const title: string = typeof body?.title === "string" ? body.title.trim() : "";

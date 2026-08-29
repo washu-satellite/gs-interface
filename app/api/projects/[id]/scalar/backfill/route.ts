@@ -18,13 +18,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const [channels, events] = await Promise.all([
         db.query(
-            `SELECT "channelId" as id, name, value, text, "spacecraftTime" as time, "receivedAt"
+            `SELECT 'channel' as kind, "channelId" as id, name, value, text, "spacecraftTime" as time, "receivedAt"
              FROM scalar_telemetry_log WHERE "projectId" = $1 ${sinceClause}
              ORDER BY "receivedAt" DESC LIMIT ${limit}`,
             args
         ).catch(() => ({ rows: [] })),
         db.query(
-            `SELECT "eventId" as id, name, severity, message, "spacecraftTime" as time, "receivedAt"
+            `SELECT 'event' as kind, "eventId" as id, name, severity, message, "spacecraftTime" as time, "receivedAt"
              FROM scalar_event_log WHERE "projectId" = $1 ${sinceClause}
              ORDER BY "receivedAt" DESC LIMIT ${limit}`,
             args

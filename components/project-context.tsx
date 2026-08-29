@@ -3,6 +3,8 @@
 import { AdcsConfig, Notification, Project } from "@/lib/projects";
 import { DashboardView, ViewItem } from "@/lib/blocks";
 import { createContext, useCallback, useContext, useEffect, useState, ReactNode } from "react";
+import { bStore } from "@/hooks/useAppStore";
+import { ScalarChannelSample, ScalarEventRecord } from "@/types/scalar";
 
 type ProjectContextValue = {
     projects: Project[];
@@ -113,6 +115,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             .then((r) => r.json())
             .then((data: DashboardView[]) => alive && setViews(data))
             .catch(() => alive && setViews([]));
+        return () => {
+            alive = false;
+        };
+    }, [activeId]);
+
+    useEffect(() => {
+        if (!activeId) return;
+        let alive = true;
+        fetch(`/api/projects/${activeId}/scalar/backfill`, { cache: "no-store" })
+            .then((r) => r.json())
+            .then((data: { channels: ScalarChannelSample[]; events: ScalarEventRecord[] }) => {
+                if (!alive) return;
+                bStore.getState().hydrateScalar(data.channels ?? [], data.events ?? []);
+            })
+            .catch(() => {});
         return () => {
             alive = false;
         };

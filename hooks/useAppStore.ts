@@ -40,6 +40,7 @@ type SocketStore = {
     subscribe: (channel: string, sub: Subscription) => void;
     addMessage: (envelope: MessageEnvelope) => void;
     addScalarMessage: (message: ScalarMessage) => void;
+    hydrateScalar: (channels: ScalarChannelSample[], events: ScalarEventRecord[]) => void;
     addChannel: (channel: string) => void;
     removeChannel: (channel: string) => void;
     setSimStatus: (status: SimStatus | null, engine: SimEngineState) => void;
@@ -98,6 +99,15 @@ const createSocketStore: StateCreator<SocketStore, [], []> = (set) => ({
             .slice(-SCALAR_EVENT_LIMIT)
         };
       return {};
+    }),
+    hydrateScalar: (channels, events) => set((state) => {
+      const scalarChannels = { ...state.scalarChannels };
+      for (const c of channels) scalarChannels[c.name] = c;
+
+      const backfilled = events.map((e) => ({ ...e, seq: scalarEventSeq++ }));
+      const scalarEvents = [...backfilled, ...state.scalarEvents].slice(-SCALAR_EVENT_LIMIT);
+
+      return { scalarChannels, scalarEvents };
     }),
     addChannel: (channel) => set((state) => ({ openChannels: [...state.openChannels, channel] })),
     removeChannel: (channel) => set((state) => ({ openChannels: state.openChannels.filter(c => c !== channel) })),

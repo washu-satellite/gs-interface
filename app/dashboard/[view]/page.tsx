@@ -528,7 +528,7 @@ function Heading() {
     return (
         <div className="sticky top-0 z-50">
             <div className="flex flex-row items-center justify-between text-nowrap gap-10 pr-4">
-                <div className="flex flex-row items-center">
+                <div className="flex flex-row items-center gap-2">
                     {/* <a href="https://www.washusatellite.com" className="shrink-0">
                         <img src={"/logo.svg"} alt="" className="h-12 p-2 pb-3"/>
                     </a> */}

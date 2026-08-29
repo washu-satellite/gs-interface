@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
   // production use. (Next 16 doesn't run ESLint during build, so no eslint
   // key is needed.)
   typescript: { ignoreBuildErrors: true },
+  output: "standalone",
 };
 
 export default nextConfig;

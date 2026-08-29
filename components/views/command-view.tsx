@@ -8,7 +8,7 @@ import { bStore } from "@/hooks/useAppStore";
 import { MessageEnvelope } from "@/gen/messages/transport/v1/transport_pb";
 import { buildEnvelope } from "@/lib/utils";
 import { CommandBadgeType } from "@/types/ui";
-import { CmdFormInternalMessage, cmdInternalMessage, CommandDetails, commandDetails } from "@/constants/commands";
+import { CmdFormInternalMessage, cmdInternalMessage, CmdFormPointing, cmdPointing, CmdFormSafeModeExit, cmdSafeModeExit, CommandDetails, commandDetails, allCommands } from "@/constants/commands";
 import { useSettings } from "@/lib/settings";
 
 
@@ -38,6 +38,7 @@ const CommandEntry = (props: {
     description?: string,
     badge: CommandBadgeType,
     filterTerm?: string,
+    highlighted?: boolean,
     selectItem?: () => void
 }) => {
     let idElm: ReactNode = props.id;
@@ -68,7 +69,7 @@ const CommandEntry = (props: {
     return (
         <div
             tabIndex={0}
-            className="bg-blue-100 text-blue-600 hover:bg-blue-200 dark:bg-blue-950 dark:hover:bg-blue-900 dark:text-blue-100 hover:cursor-pointer p-4 rounded-lg tabindex"
+            className={`bg-blue-100 text-blue-600 hover:bg-blue-200 dark:bg-blue-950 dark:hover:bg-blue-900 dark:text-blue-100 hover:cursor-pointer p-4 rounded-lg tabindex ${props.highlighted ? "ring-2 ring-blue-500" : ""}`}
             onClick={props.selectItem}
         >
             <div className="flex flex-row justify-between items-center">
@@ -103,16 +104,28 @@ function CommandForm(props: {
         return (
             <CmdFormInternalMessage onSubmit={(values) => props.onSubmit(values, cmdInternalMessage)} />
         );
+    case 'pointingCmd':
+        return (
+            <CmdFormPointing onSubmit={(values) => props.onSubmit(values, cmdPointing)} />
+        );
+    case 'safeModeExitCmd':
+        return (
+            <CmdFormSafeModeExit onSubmit={(values) => props.onSubmit(values, cmdSafeModeExit)} />
+        );
     }
 }
 
 const CommandPrompt = (props: {
-    search: string
+    search: string,
+    formMessage: MessageEnvelope["messageBody"]["case"] | null,
+    setFormMessage: (fm: MessageEnvelope["messageBody"]["case"] | null) => void,
+    highlightedId?: MessageEnvelope["messageBody"]["case"] | null
 }) => {
     const _client = bStore.use.client();
     const [settings] = useSettings();
 
-    const [formMessage, setFormMessage] = useState<MessageEnvelope["messageBody"]["case"] | null>(null);
+    const formMessage = props.formMessage;
+    const setFormMessage = props.setFormMessage;
     const [pending, setPending] = useState<{ values: any; cd: CommandDetails<z.ZodObject> } | null>(null);
 
     const searchLow = props.search.toLowerCase();
@@ -164,7 +177,8 @@ const CommandPrompt = (props: {
                             {...sc}
                             id={sc.group + "::" + sc.id}
                             filterTerm={formMessage ? "" : searchLow}
-                            selectItem={() => setFormMessage(fm => fm == sc.messageEnvelopeId ? null : sc.messageEnvelopeId)}
+                            highlighted={props.highlightedId === sc.messageEnvelopeId}
+                            selectItem={() => setFormMessage(formMessage === sc.messageEnvelopeId ? null : sc.messageEnvelopeId)}
                         />
                         <div className="flex flex-row items-stretch gap-2 pt-2">
                             <div className="bg-blue-100 w-0.5 rounded-full mx-2"/>
@@ -178,7 +192,7 @@ const CommandPrompt = (props: {
                                     id={sc.group + "::" + sc.id + "::" + v.id}
                                     badge="sub"
                                     filterTerm={formMessage ? "" : searchLow}
-                                    selectItem={() => setFormMessage(fm => fm == sc.messageEnvelopeId ? null : sc.messageEnvelopeId)}
+                                    selectItem={() => setFormMessage(formMessage === sc.messageEnvelopeId ? null : sc.messageEnvelopeId)}
                                     description={v.description}
                                 />
                             ))}
@@ -222,6 +236,34 @@ const CommandPrompt = (props: {
 export default function CommandView() {
     const [expandSearch, setExpandSearch] = useState(false);
     const [search, setSearch] = useState("");
+    const [formMessage, setFormMessage] = useState<MessageEnvelope["messageBody"]["case"] | null>(null);
+    const [highlightIndex, setHighlightIndex] = useState(0);
+
+    const searchLow = search.toLowerCase();
+    const flatMatches = allCommands.filter(c =>
+        c.id.toLowerCase().includes(searchLow)
+        || c.description.toLowerCase().includes(searchLow)
+        || c.variants.some(v =>
+            v.id.toLowerCase().includes(searchLow) || v.description.toLowerCase().includes(searchLow)
+        )
+    );
+
+    const onSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (!expandSearch || flatMatches.length === 0) return;
+        if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setHighlightIndex(i => Math.min(i + 1, flatMatches.length - 1));
+        } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setHighlightIndex(i => Math.max(i - 1, 0));
+        } else if (e.key === "Enter") {
+            e.preventDefault();
+            const cmd = flatMatches[highlightIndex];
+            if (cmd) setFormMessage(formMessage === cmd.messageEnvelopeId ? null : cmd.messageEnvelopeId);
+        } else if (e.key === "Escape") {
+            setExpandSearch(false);
+        }
+    };
 
     return (
         <div className="flex flex-col h-full">
@@ -229,6 +271,9 @@ export default function CommandView() {
                 {expandSearch &&
                     <CommandPrompt
                         search={search}
+                        formMessage={formMessage}
+                        setFormMessage={setFormMessage}
+                        highlightedId={flatMatches[highlightIndex]?.messageEnvelopeId}
                     />
                 }
             </div>
@@ -236,13 +281,17 @@ export default function CommandView() {
                 <Input
                     className="flex-1 rounded-r-none rounded-tl-none border-r-0 z-10"
                     placeholder={`internal::message heading="hello" message="test"`}
+                    value={search}
+                    onKeyDown={onSearchKeyDown}
                     onChange={(e) => {
                         const val = e.target.value;
+                        setHighlightIndex(0);
                         if (val !== "") {
                             setExpandSearch(true);
                             setSearch(val);
                         } else {
                             setExpandSearch(false);
+                            setSearch(val);
                         }
                     }}
                 />

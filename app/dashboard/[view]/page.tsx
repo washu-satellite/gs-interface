@@ -30,6 +30,7 @@ import { playNotificationSound } from "@/lib/notification-sound";
 import { useScalarEventAlerts } from "@/hooks/useScalarEventAlerts";
 import { useSimStatusPoller } from "@/hooks/useSimStatus";
 import { useScalarBridgeHealthPoller } from "@/hooks/useScalarBridgeHealth";
+import { useNextPassPoller } from "@/hooks/useNextPass";
 import { rememberView } from "@/lib/last-view";
 import { CustomDashboardView, MopsEditor } from "@/components/views/custom-dashboard-view";
 import CommandQueueView from "@/components/views/command-queue-view";
@@ -492,8 +493,10 @@ function Heading() {
     useScalarEventAlerts();
     useSimStatusPoller();
     useScalarBridgeHealthPoller();
+    useNextPassPoller(activeProject?.id);
     const simStatus = bStore.use.simStatus();
     const bridgeHealth = bStore.use.bridgeHealth();
+    const nextPass = bStore.use.nextPass();
 
     const visibleNotifications = notifications.filter((n) =>
         n.level === "critical"
@@ -550,6 +553,22 @@ function Heading() {
                         </DropdownMenuContent>
                     </DropdownMenu>
                     <ModeTrigger live={connected} />
+                    {nextPass?.status === "active" && (
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <div className="flex flex-row items-center gap-1.5 rounded-full border border-green-600/50 bg-green-600/10 px-2.5 py-1 text-green-500 cursor-default">
+                                    <span className="relative flex h-2 w-2">
+                                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-500 opacity-75" />
+                                        <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+                                    </span>
+                                    <span className="text-xs font-semibold uppercase tracking-wide">Pass Active</span>
+                                </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom">
+                                A scheduled pass window is open right now, per the mission calendar. {nextPass.label}.
+                            </TooltipContent>
+                        </Tooltip>
+                    )}
                     {activeProject?.id === "scalar" && bridgeHealth && (
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -599,7 +618,7 @@ function Heading() {
                     )}
                 </div>
                 <div className="flex-row items-end gap-10 py-2 text-foreground/90 hidden lg:flex">
-                    <StatField title="Next Pass" value={live ? "T-00:54:02" : "--"}/>
+                    <StatField title="Next Pass" value={nextPass?.label ?? "--"}/>
                     <StatField title="Health Status" value={live ? "NOMINAL" : "--"}/>
                     <StatField title="Current Mode" value={live ? "STANDBY" : "--"}/>
                     <StatField title="Link SNR" value={live ? "10.24" : "--"} units={live ? "dB" : undefined}/>

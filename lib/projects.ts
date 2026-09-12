@@ -18,6 +18,7 @@ export type AdcsConfig = {
     showOrbit: boolean;
     showAtmosphere: boolean;
     showStation: boolean;
+    showPassZone: boolean;
     autoRotate: boolean;
     live: boolean;
 };
@@ -42,6 +43,7 @@ export const DEFAULT_ADCS_CONFIG: AdcsConfig = {
     showOrbit: true,
     showAtmosphere: true,
     showStation: true,
+    showPassZone: true,
     autoRotate: false,
     live: false,
 };

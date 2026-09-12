@@ -19,7 +19,7 @@ import { Slider } from "../ui/slider";
 import { Textarea } from "../ui/textarea";
 import { Spinner } from "../ui/spinner";
 import { bStore } from "@/hooks/useAppStore";
-import { parseTle, propagateState, periodMinutes, groundTrack, type OrbitState } from "@/lib/orbit";
+import { parseTle, propagateState, periodMinutes, groundTrack, elevationDeg, meanAltitudeKm, visibilityConeGeometryKm, MIN_ELEVATION_DEG, type OrbitState } from "@/lib/orbit";
 import type { SatRec } from "satellite.js";
 import type { ScalarChannelSample } from "@/types/scalar";
 
@@ -704,6 +704,84 @@ function OrbitTrack(props: { points: THREE.Vector3[] }) {
     return <Line points={props.points} color="#8ec5ff" lineWidth={1.5} transparent opacity={0.5} />;
 }
 
+function VisibilityCone(props: {
+    lon: number;
+    lat: number;
+    altKm: number;
+    minElevationDeg: number;
+    satrec: SatRec | null;
+    simTimeRef: { current: number };
+}) {
+    const groupRef = useRef<THREE.Group>(null);
+    const materialRef = useRef<THREE.MeshBasicMaterial>(null);
+    const ringMaterialRef = useRef<THREE.MeshBasicMaterial>(null);
+
+    const base = useMemo(() => latLonToSpherePos(props.lon, props.lat, R_EARTH), [props.lon, props.lat]);
+    const quat = useMemo(
+        () => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), base.clone().normalize()),
+        [base]
+    );
+
+    const { geometry, baseRadiusUnits, heightUnits } = useMemo(() => {
+        const { heightKm, radiusKm } = visibilityConeGeometryKm(props.altKm, props.minElevationDeg);
+        const heightUnits = Math.max(heightKm, 0.001) * KM_TO_UNITS;
+        const baseRadiusUnits = radiusKm * KM_TO_UNITS;
+        const geo = new THREE.ConeGeometry(baseRadiusUnits, heightUnits, 48, 1, true);
+        geo.scale(1, -1, 1);
+        geo.translate(0, heightUnits / 2, 0);
+        return { geometry: geo, baseRadiusUnits, heightUnits };
+    }, [props.altKm, props.minElevationDeg]);
+
+    const observerGd = useMemo(
+        () => ({
+            latitude: (props.lat * Math.PI) / 180,
+            longitude: (props.lon * Math.PI) / 180,
+            height: 0,
+        }),
+        [props.lat, props.lon]
+    );
+
+    useFrame(() => {
+        if (!props.satrec) return;
+        const elev = elevationDeg(props.satrec, new Date(props.simTimeRef.current), observerGd);
+        const active = elev !== null && elev >= props.minElevationDeg;
+        if (materialRef.current) {
+            materialRef.current.color.set(active ? "#5ffb9c" : "#8ec5ff");
+            materialRef.current.opacity = active ? 0.28 : 0.08;
+        }
+        if (ringMaterialRef.current) {
+            ringMaterialRef.current.color.set(active ? "#5ffb9c" : "#8ec5ff");
+            ringMaterialRef.current.opacity = active ? 0.95 : 0.45;
+        }
+    });
+
+    return (
+        <group ref={groupRef} position={base.toArray()} quaternion={quat}>
+            <mesh geometry={geometry}>
+                <meshBasicMaterial
+                    ref={materialRef}
+                    color="#8ec5ff"
+                    transparent
+                    opacity={0.08}
+                    side={THREE.DoubleSide}
+                    depthWrite={false}
+                />
+            </mesh>
+            <mesh position={[0, heightUnits, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                <ringGeometry args={[baseRadiusUnits * 0.985, baseRadiusUnits * 1.015, 64]} />
+                <meshBasicMaterial
+                    ref={ringMaterialRef}
+                    color="#8ec5ff"
+                    transparent
+                    opacity={0.45}
+                    side={THREE.DoubleSide}
+                    depthWrite={false}
+                />
+            </mesh>
+        </group>
+    );
+}
+
 function OrbitalScene(props: {
     satrec: SatRec | null;
     simTimeRef: { current: number };
@@ -774,6 +852,10 @@ function ThreeScene(props: {
     showOrbit: boolean;
     showStation: boolean;
     showAtmosphere: boolean;
+    showPassZone: boolean;
+    stationLat: number;
+    stationLon: number;
+    passZoneAltKm: number;
     autoRotate: boolean;
 }) {
     const controlsRef = useRef<any>(null);
@@ -798,6 +880,16 @@ function ThreeScene(props: {
             <directionalLight position={[10, 10, 10]} intensity={1.4} castShadow />
             <Earth stations={props.showStation} rotate={props.autoRotate} atmosphere={props.showAtmosphere}>
                 {props.showOrbit && <OrbitTrack points={props.trackPoints} />}
+                {props.showPassZone && (
+                    <VisibilityCone
+                        lon={props.stationLon}
+                        lat={props.stationLat}
+                        altKm={props.passZoneAltKm}
+                        minElevationDeg={MIN_ELEVATION_DEG}
+                        satrec={props.satrec}
+                        simTimeRef={props.simTimeRef}
+                    />
+                )}
                 {props.satrec && (
                     <Sgp4Satellite satrec={props.satrec} simTimeRef={props.simTimeRef} quatText={props.quatText} />
                 )}
@@ -1043,6 +1135,7 @@ function AdcsConfigModal(props: { initialConfig: AdcsConfig; onCancel: () => voi
         ["showOrbit", "Orbit track"],
         ["showAtmosphere", "Atmosphere"],
         ["showStation", "Ground station"],
+        ["showPassZone", "Pass visibility cone"],
         ["autoRotate", "Auto-rotate globe"],
     ];
 
@@ -1365,6 +1458,11 @@ function SceneWrapper() {
         [satrec, simDate]
     );
 
+    const passZoneAltKm = useMemo(
+        () => (satrec ? meanAltitudeKm(satrec) : Number(config.altitudeKm) || 550),
+        [satrec, config.altitudeKm]
+    );
+
     const quatText = config.chQuaternion ? channels[config.chQuaternion]?.text ?? null : null;
 
     const map = useMemo<KeyboardControlsEntry<Controls>[]>(
@@ -1388,6 +1486,10 @@ function SceneWrapper() {
                         showOrbit={config.showOrbit}
                         showStation={config.showStation}
                         showAtmosphere={config.showAtmosphere}
+                        showPassZone={config.showPassZone}
+                        stationLat={Number(config.stationLat) || GROUND_STATIONS[0].lat}
+                        stationLon={Number(config.stationLon) || GROUND_STATIONS[0].lon}
+                        passZoneAltKm={passZoneAltKm}
                         autoRotate={config.autoRotate}
                     />
                 </Canvas>

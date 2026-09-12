@@ -27,10 +27,10 @@ export function parseTle(line1: string, line2: string): SatRec | null {
 }
 
 export function propagateState(rec: SatRec, date: Date): OrbitState | null {
-    const pv = propagate(rec, date);
+    const pv = propagate(rec, date); // Gives the satellite's propagated position at this datetime
     if (!pv || !pv.position || typeof pv.position === "boolean") return null;
-    const gmst = gstime(date);
-    const geo = eciToGeodetic(pv.position, gmst);
+    const gmst = gstime(date); // Greenwich Mean Sidereal Time
+    const geo = eciToGeodetic(pv.position, gmst); // Earth-centered Inertial cartesian coords to angular geodetic (lat, long, alt) coords
     const v = pv.velocity;
     const speed = v && typeof v !== "boolean" ? Math.hypot(v.x, v.y, v.z) : 0;
     const lat = degreesLat(geo.latitude);
@@ -41,6 +41,31 @@ export function propagateState(rec: SatRec, date: Date): OrbitState | null {
 
 export function periodMinutes(rec: SatRec): number {
     return rec.no > 0 ? (2 * Math.PI) / rec.no : 0;
+}
+
+const EARTH_MU_KM3_S2 = 398600.4418;
+const MEAN_EARTH_RADIUS_KM = 6371;
+
+export function meanAltitudeKm(rec: SatRec): number {
+    if (!(rec.no > 0)) return 0;
+    const nRadPerSec = rec.no / 60;
+    const semiMajorAxisKm = Math.cbrt(EARTH_MU_KM3_S2 / (nRadPerSec * nRadPerSec));
+    return semiMajorAxisKm - MEAN_EARTH_RADIUS_KM;
+}
+
+export function visibilityConeGeometryKm(
+    altitudeKm: number,
+    minElevationDeg: number
+): { heightKm: number; radiusKm: number } {
+    const stationRadiusKm = MEAN_EARTH_RADIUS_KM;
+    const satRadiusKm = stationRadiusKm + altitudeKm;
+    const elevRad = (minElevationDeg * Math.PI) / 180;
+    const nadirAngle = Math.asin((stationRadiusKm / satRadiusKm) * Math.cos(elevRad));
+    const centralAngle = Math.PI / 2 - elevRad - nadirAngle;
+    return {
+        heightKm: Math.max(satRadiusKm * Math.cos(centralAngle) - stationRadiusKm, 0),
+        radiusKm: Math.max(satRadiusKm * Math.sin(centralAngle), 0),
+    };
 }
 
 export function groundTrack(rec: SatRec, from: Date, spanMin: number, samples: number): GeoPoint[] {
@@ -56,12 +81,14 @@ export function groundTrack(rec: SatRec, from: Date, spanMin: number, samples: n
 export type Observer = { latDeg: number; lonDeg: number; altKm: number };
 export type PassWindow = { start: Date; end: Date; maxElevationDeg: number };
 
-function elevationDeg(rec: SatRec, date: Date, observerGd: { latitude: number; longitude: number; height: number }): number | null {
+export const MIN_ELEVATION_DEG = 10;
+
+export function elevationDeg(rec: SatRec, date: Date, observerGd: { latitude: number; longitude: number; height: number }): number | null {
     const pv = propagate(rec, date);
     if (!pv || !pv.position || typeof pv.position === "boolean") return null;
     const gmst = gstime(date);
-    const ecf = eciToEcf(pv.position, gmst);
-    const look = ecfToLookAngles(observerGd, ecf);
+    const ecf = eciToEcf(pv.position, gmst); // azimuth/elevation/range coords
+    const look = ecfToLookAngles(observerGd, ecf); // Look angle of the ground station
     return look.elevation * (180 / Math.PI);
 }
 
@@ -70,7 +97,7 @@ export function computePasses(
     observer: Observer,
     from: Date,
     to: Date,
-    minElevationDeg = 10,
+    minElevationDeg = MIN_ELEVATION_DEG,
     stepSeconds = 30
 ): PassWindow[] {
     const observerGd = {

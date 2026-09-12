@@ -1,9 +1,8 @@
 import { db, ensureCalendarSchema, ensureProjectSchema } from "@/lib/db";
-import { computePasses, parseTle } from "@/lib/orbit";
+import { computePasses, parseTle, MIN_ELEVATION_DEG } from "@/lib/orbit";
 import type { Project } from "@/lib/projects";
 
 const LOOKAHEAD_HOURS = 48;
-const MIN_ELEVATION_DEG = 10;
 
 export async function computeAndStorePassesForProject(project: Project): Promise<number> {
     const cfg = project.config;

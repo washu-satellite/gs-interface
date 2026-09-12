@@ -14,12 +14,13 @@ import { OrbitControls, KeyboardControls, KeyboardControlsEntry, Line, Html, sha
 import * as earcut from 'earcut';
 
 import * as THREE from 'three';
+import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import { StatField } from "../stat-field";
 import { Slider } from "../ui/slider";
 import { Textarea } from "../ui/textarea";
 import { Spinner } from "../ui/spinner";
 import { bStore } from "@/hooks/useAppStore";
-import { parseTle, propagateState, periodMinutes, groundTrack, elevationDeg, meanAltitudeKm, visibilityConeGeometryKm, MIN_ELEVATION_DEG, type OrbitState } from "@/lib/orbit";
+import { parseTle, propagateState, periodMinutes, elevationDeg, meanAltitudeKm, visibilityConeGeometryKm, MIN_ELEVATION_DEG, type OrbitState } from "@/lib/orbit";
 import type { SatRec } from "satellite.js";
 import type { ScalarChannelSample } from "@/types/scalar";
 
@@ -35,6 +36,24 @@ const satHeight = 0.550;
 const EARTH_RADIUS_KM = 6371;
 const KM_TO_UNITS = R_EARTH / EARTH_RADIUS_KM;
 const AXIS_X = new THREE.Vector3(1, 0, 0);
+function subsolarLonLat(date: Date): { lonDeg: number; latDeg: number } {
+    const start = Date.UTC(date.getUTCFullYear(), 0, 0);
+    const dayOfYear = (date.getTime() - start) / 86400000;
+    const rad = Math.PI / 180;
+    const declDeg = -23.44 * Math.cos(rad * (360 / 365) * (dayOfYear + 10));
+    const b = rad * (360 / 365) * (dayOfYear - 81);
+    const eqTimeMin = 9.87 * Math.sin(2 * b) - 7.53 * Math.cos(b) - 1.5 * Math.sin(b);
+    const utcHours = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600;
+    const lonDeg = (((-15 * (utcHours - 12 + eqTimeMin / 60) + 180) % 360 + 360) % 360) - 180;
+    return { lonDeg, latDeg: declDeg };
+}
+
+function rawSubsolarDirection(date: Date): THREE.Vector3 {
+    const { lonDeg, latDeg } = subsolarLonLat(date);
+    const theta = ((lonDeg + 180) * Math.PI) / 180;
+    const phi = ((90 - latDeg) * Math.PI) / 180;
+    return new THREE.Vector3(-Math.cos(theta) * Math.sin(phi), Math.cos(phi), Math.sin(theta) * Math.sin(phi));
+}
 
 function circularBound(value: number, target: number, tolerance: number) {
     return (value - target + Math.PI) % (2*Math.PI) - Math.PI;
@@ -451,6 +470,284 @@ function useEarthTexture(): THREE.CanvasTexture | null {
     return tex;
 }
 
+type EarthPhotoTextures = {
+    day: THREE.Texture;
+    night: THREE.Texture;
+    clouds: THREE.Texture;
+    specular: THREE.Texture;
+};
+
+let earthPhotoCache: EarthPhotoTextures | null = null;
+let earthPhotoLoading: Promise<EarthPhotoTextures> | null = null;
+
+function loadEarthPhotoTextures(): Promise<EarthPhotoTextures> {
+    if (earthPhotoCache) return Promise.resolve(earthPhotoCache);
+    if (earthPhotoLoading) return earthPhotoLoading;
+    const loader = new THREE.TextureLoader();
+    const load = (url: string) =>
+        new Promise<THREE.Texture>((resolve, reject) => loader.load(url, resolve, undefined, reject));
+    earthPhotoLoading = Promise.all([
+        load("/textures/earth/earth_atmos_2048.jpg"),
+        load("/textures/earth/earth_lights_2048.png"),
+        load("/textures/earth/earth_clouds_1024.png"),
+        load("/textures/earth/earth_specular_2048.jpg"),
+    ]).then(([day, night, clouds, specular]) => {
+        for (const t of [day, night, clouds, specular]) {
+            t.colorSpace = THREE.SRGBColorSpace;
+            t.anisotropy = 4;
+        }
+        earthPhotoCache = { day, night, clouds, specular };
+        return earthPhotoCache;
+    });
+    return earthPhotoLoading;
+}
+
+function useEarthPhotoTextures(): EarthPhotoTextures | null {
+    const [tex, setTex] = useState<EarthPhotoTextures | null>(() => earthPhotoCache);
+    useEffect(() => {
+        if (earthPhotoCache) {
+            setTex(earthPhotoCache);
+            return;
+        }
+        let alive = true;
+        loadEarthPhotoTextures().then((t) => {
+            if (alive) setTex(t);
+        });
+        return () => {
+            alive = false;
+        };
+    }, []);
+    return tex;
+}
+
+const EARTH_DAYNIGHT_VERTEX = `
+varying vec2 vUv;
+varying vec3 vObjectNormal;
+void main() {
+    vUv = uv;
+    vObjectNormal = normal;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+const EARTH_DAYNIGHT_FRAGMENT = `
+uniform sampler2D dayMap;
+uniform sampler2D nightMap;
+uniform sampler2D specularMap;
+uniform vec3 sunDirection;
+varying vec2 vUv;
+varying vec3 vObjectNormal;
+void main() {
+    vec3 n = normalize(vObjectNormal);
+    vec3 s = normalize(sunDirection);
+    float facing = dot(n, s);
+    float dayAmount = smoothstep(-0.2, 0.15, facing);
+
+    vec3 dayColor = texture2D(dayMap, vUv).rgb;
+    vec3 nightColor = texture2D(nightMap, vUv).rgb * 1.6;
+    float oceanMask = texture2D(specularMap, vUv).r;
+
+    vec3 color = mix(nightColor, dayColor, dayAmount);
+
+    float glint = pow(max(facing, 0.0), 18.0) * oceanMask * dayAmount;
+    color += vec3(1.0, 0.97, 0.9) * glint * 0.7;
+
+    gl_FragColor = vec4(color, 1.0);
+}
+`;
+
+const ATMOSPHERE_VERTEX = `
+varying vec3 vNormal;
+void main() {
+    vNormal = normalize(normalMatrix * normal);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+const ATMOSPHERE_FRAGMENT = `
+uniform vec3 glowColor;
+uniform float power;
+uniform float coefficient;
+varying vec3 vNormal;
+void main() {
+    float intensity = pow(max(coefficient - dot(vNormal, vec3(0.0, 0.0, 1.0)), 0.0), power);
+    gl_FragColor = vec4(glowColor, 1.0) * intensity;
+}
+`;
+
+const EarthDayNightMaterial = shaderMaterial(
+    {
+        dayMap: null,
+        nightMap: null,
+        specularMap: null,
+        sunDirection: new THREE.Vector3(1, 0, 0),
+    },
+    EARTH_DAYNIGHT_VERTEX,
+    EARTH_DAYNIGHT_FRAGMENT
+);
+
+const AtmosphereMaterial = shaderMaterial(
+    { glowColor: new THREE.Color("#4fa8ff"), power: 4.0, coefficient: 0.7 },
+    ATMOSPHERE_VERTEX,
+    ATMOSPHERE_FRAGMENT
+);
+
+extend({ EarthDayNightMaterial, AtmosphereMaterial });
+
+function CloudLayer(props: { radius: number; texture: THREE.Texture }) {
+    const ref = useRef<THREE.Mesh>(null);
+    useFrame((_, delta) => {
+        if (ref.current) ref.current.rotation.y += 0.011 * delta;
+    });
+    return (
+        <mesh ref={ref} rotation={[0, -Math.PI / 2, 0]} scale={1.022}>
+            <sphereGeometry args={[props.radius, 96, 96]} />
+            <meshStandardMaterial
+                map={props.texture}
+                transparent
+                opacity={0.85}
+                depthWrite={false}
+                side={THREE.DoubleSide}
+            />
+        </mesh>
+    );
+}
+
+function AtmosphereGlow(props: { radius: number }) {
+    return (
+        <mesh scale={1.15}>
+            <sphereGeometry args={[props.radius, 64, 64]} />
+            <atmosphereMaterial
+                glowColor={new THREE.Color("#4fa8ff")}
+                power={4.0}
+                coefficient={0.7}
+                side={THREE.BackSide}
+                transparent
+                depthWrite={false}
+                blending={THREE.AdditiveBlending}
+            />
+        </mesh>
+    );
+}
+
+function makeGlowSprite(size: number, tint: string): THREE.CanvasTexture {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = size;
+    const ctx = canvas.getContext("2d")!;
+    const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    grad.addColorStop(0, "rgba(255,255,255,1)");
+    grad.addColorStop(0.25, tint);
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, size, size);
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.generateMipmaps = false;
+    tex.minFilter = THREE.LinearFilter;
+    tex.magFilter = THREE.LinearFilter;
+    tex.needsUpdate = true;
+    return tex;
+}
+
+function SunRig(props: { simTimeRef: { current: number }; distance: number }) {
+    const groupRef = useRef<THREE.Group>(null);
+    const lightRef = useRef<THREE.DirectionalLight>(null);
+    const haloTexture = useMemo(() => makeGlowSprite(256, "rgba(255,225,170,0.5)"), []);
+
+    useFrame(() => {
+        const date = new Date(props.simTimeRef.current);
+        const { lonDeg, latDeg } = subsolarLonLat(date);
+        const pos = latLonToSpherePos(lonDeg, latDeg, 1).multiplyScalar(props.distance);
+        groupRef.current?.position.copy(pos);
+        lightRef.current?.position.copy(pos);
+    });
+
+    return (
+        <>
+            <directionalLight ref={lightRef} intensity={2.4} color="#fff4e0" />
+            <group ref={groupRef}>
+                <sprite scale={[R_EARTH * 9, R_EARTH * 9, 1]}>
+                    <spriteMaterial
+                        map={haloTexture}
+                        transparent
+                        depthWrite={false}
+                        toneMapped={false}
+                        blending={THREE.AdditiveBlending}
+                    />
+                </sprite>
+                <mesh>
+                    <sphereGeometry args={[R_EARTH * 1.6, 32, 32]} />
+                    <meshBasicMaterial color="#fff6e2" toneMapped={false} />
+                </mesh>
+            </group>
+        </>
+    );
+}
+
+function RealisticEarth(props: {
+    radius?: number;
+    rotate?: boolean;
+    stations?: boolean;
+    atmosphere?: boolean;
+    simTimeRef: { current: number };
+    children?: React.ReactNode;
+}) {
+    const radius = props.radius ?? R_EARTH;
+    const spin = props.rotate ?? true;
+    const groupRef = useRef<THREE.Group>(null);
+    const globeRef = useRef<THREE.Mesh>(null);
+    const materialRef = useRef<any>(null);
+    const textures = useEarthPhotoTextures();
+    const fallbackMap = useEarthTexture();
+
+    useFrame((_, delta) => {
+        if (spin && groupRef.current) {
+            groupRef.current.rotation.y += 0.03 * delta;
+        }
+        if (materialRef.current) {
+            const dir = rawSubsolarDirection(new Date(props.simTimeRef.current));
+            materialRef.current.uniforms.sunDirection.value.copy(dir);
+        }
+    });
+
+    return (
+        <group ref={groupRef}>
+            <mesh ref={globeRef} rotation={[0, -Math.PI / 2, 0]}>
+                <sphereGeometry args={[radius, 96, 96]} />
+                {textures ? (
+                    <earthDayNightMaterial
+                        ref={materialRef}
+                        key="photo"
+                        dayMap={textures.day}
+                        nightMap={textures.night}
+                        specularMap={textures.specular}
+                    />
+                ) : (
+                    <meshStandardMaterial
+                        key={fallbackMap ? "textured" : "plain"}
+                        map={fallbackMap ?? undefined}
+                        color={fallbackMap ? "#ffffff" : OCEAN_COLOR}
+                        emissive="#0a2742"
+                        emissiveIntensity={0.2}
+                        roughness={0.85}
+                        metalness={0.1}
+                    />
+                )}
+            </mesh>
+
+            {textures && <CloudLayer radius={radius} texture={textures.clouds} />}
+
+            {props.stations &&
+                GROUND_STATIONS.map((s) => (
+                    <GroundStationPin key={s.label} {...s} occludeRef={globeRef} />
+                ))}
+
+            {props.children}
+
+            {(props.atmosphere ?? true) && <AtmosphereGlow radius={radius} />}
+        </group>
+    );
+}
+
 // Convert geographic lon/lat to a point on the globe, matching the textured
 // sphere exactly: THREE.SphereGeometry's UV convention plus the globe mesh's
 // -90° Y rotation. Returns a surface point at the given radius.
@@ -694,14 +991,44 @@ function Sgp4Satellite(props: { satrec: SatRec; simTimeRef: { current: number };
 
     return (
         <group ref={satRef}>
-            <CubeSat scale={1.1} />
+            <CubeSat scale={0.55} />
         </group>
     );
 }
 
-function OrbitTrack(props: { points: THREE.Vector3[] }) {
+function OrbitTrack(props: { points: THREE.Vector3[]; active?: boolean[] }) {
     if (props.points.length < 2) return null;
-    return <Line points={props.points} color="#8ec5ff" lineWidth={1.5} transparent opacity={0.5} />;
+    if (!props.active) {
+        return <Line points={props.points} color="#8ec5ff" lineWidth={1.5} transparent opacity={0.5} />;
+    }
+    const colors = props.points.map((_, i): [number, number, number] =>
+        props.active![i] ? [0.37, 0.98, 0.61] : [0.56, 0.77, 1.0]
+    );
+    return <Line points={props.points} vertexColors={colors} lineWidth={2} transparent opacity={0.75} />;
+}
+
+type TrackPassInfo = { position: THREE.Vector3; start: Date; end: Date };
+
+function fmtUtcHm(d: Date): string {
+    return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+}
+
+function PassTimeLabel(props: { pass: TrackPassInfo; occludeRef?: React.RefObject<THREE.Mesh | null> }) {
+    const labelPos = useMemo(() => props.pass.position.clone().multiplyScalar(1.08), [props.pass.position]);
+    return (
+        <Html
+            position={labelPos.toArray()}
+            center
+            distanceFactor={11}
+            occlude={props.occludeRef ? ([props.occludeRef] as any) : undefined}
+        >
+            <div className="px-1.5 py-0.5 rounded bg-black/70 border border-emerald-400/50 select-none whitespace-nowrap pointer-events-none">
+                <p className="font-mono text-[10px] text-emerald-300">
+                    {fmtUtcHm(props.pass.start)}–{fmtUtcHm(props.pass.end)} UTC
+                </p>
+            </div>
+        </Html>
+    );
 }
 
 function VisibilityCone(props: {
@@ -786,6 +1113,7 @@ function OrbitalScene(props: {
     satrec: SatRec | null;
     simTimeRef: { current: number };
     trackPoints: THREE.Vector3[];
+    trackActive?: boolean[];
     quatText?: string | null;
     showOrbit: boolean;
 }) {
@@ -801,7 +1129,7 @@ function OrbitalScene(props: {
                 <ambientLight intensity={1.1} />
                 <directionalLight position={[camPos.x, camPos.y, camPos.z]} intensity={1} />
                 <Earth radius={R_EARTH} rotate={false} stations atmosphere>
-                    {props.showOrbit && <OrbitTrack points={props.trackPoints} />}
+                    {props.showOrbit && <OrbitTrack points={props.trackPoints} active={props.trackActive} />}
                     {props.satrec && (
                         <Sgp4Satellite satrec={props.satrec} simTimeRef={props.simTimeRef} quatText={props.quatText} />
                     )}
@@ -848,6 +1176,8 @@ function ThreeScene(props: {
     satrec: SatRec | null;
     simTimeRef: { current: number };
     trackPoints: THREE.Vector3[];
+    trackActive?: boolean[];
+    trackPasses?: TrackPassInfo[];
     quatText?: string | null;
     showOrbit: boolean;
     showStation: boolean;
@@ -876,10 +1206,18 @@ function ThreeScene(props: {
 
     return (
         <>
-            <ambientLight intensity={0.5}/>
-            <directionalLight position={[10, 10, 10]} intensity={1.4} castShadow />
-            <Earth stations={props.showStation} rotate={props.autoRotate} atmosphere={props.showAtmosphere}>
-                {props.showOrbit && <OrbitTrack points={props.trackPoints} />}
+            <ambientLight intensity={0.15} />
+            <SunRig simTimeRef={props.simTimeRef} distance={R_EARTH * 15} />
+            <RealisticEarth
+                stations={props.showStation}
+                rotate={props.autoRotate}
+                atmosphere={props.showAtmosphere}
+                simTimeRef={props.simTimeRef}
+            >
+                {props.showOrbit && <OrbitTrack points={props.trackPoints} active={props.trackActive} />}
+                {props.showOrbit &&
+                    props.showPassZone &&
+                    props.trackPasses?.map((pass, i) => <PassTimeLabel key={i} pass={pass} />)}
                 {props.showPassZone && (
                     <VisibilityCone
                         lon={props.stationLon}
@@ -893,7 +1231,7 @@ function ThreeScene(props: {
                 {props.satrec && (
                     <Sgp4Satellite satrec={props.satrec} simTimeRef={props.simTimeRef} quatText={props.quatText} />
                 )}
-            </Earth>
+            </RealisticEarth>
             <OrbitControls
                 ref={controlsRef}
                 maxDistance={3 * R_EARTH}
@@ -902,6 +1240,9 @@ function ThreeScene(props: {
                 zoomSpeed={0.1}
                 zoom0={R_EARTH}
             />
+            <EffectComposer>
+                <Bloom luminanceThreshold={0.65} luminanceSmoothing={0.9} intensity={0.4} mipmapBlur radius={0.5} />
+            </EffectComposer>
         </>
     );
 }
@@ -1446,12 +1787,52 @@ function SceneWrapper() {
     const scrub = (min: number) => { setPlaying(false); setOffset(min); };
 
     const trackKey = Math.floor(offsetMin / 15);
-    const trackPoints = useMemo(() => {
-        if (!satrec) return [] as THREE.Vector3[];
+    const trackData = useMemo(() => {
+        const empty = { points: [] as THREE.Vector3[], active: [] as boolean[], passes: [] as TrackPassInfo[] };
+        if (!satrec) return empty;
+
+        const lat = Number(config.stationLat);
+        const lon = Number(config.stationLon);
+        const observerGd =
+            Number.isFinite(lat) && Number.isFinite(lon)
+                ? { latitude: (lat * Math.PI) / 180, longitude: (lon * Math.PI) / 180, height: 0 }
+                : null;
+
         const from = new Date(epochRef.current + trackKey * 15 * 60000);
         const per = periodMinutes(satrec) || 95;
-        return groundTrack(satrec, from, per, 160).map((p) => geoToUnits(p.lat, p.lon, p.altKm));
-    }, [satrec, trackKey]);
+        const samples = 160;
+
+        const points: THREE.Vector3[] = [];
+        const active: boolean[] = [];
+        const times: Date[] = [];
+        for (let i = 0; i <= samples; i++) {
+            const t = new Date(from.getTime() + (per * 60000 * i) / samples);
+            const s = propagateState(satrec, t);
+            if (!s) continue;
+            points.push(geoToUnits(s.lat, s.lon, s.altKm));
+            times.push(t);
+            const elev = observerGd ? elevationDeg(satrec, t, observerGd) : null;
+            active.push(elev !== null && elev >= MIN_ELEVATION_DEG);
+        }
+
+        const passes: TrackPassInfo[] = [];
+        let runStart = -1;
+        for (let i = 0; i <= points.length; i++) {
+            const isActive = i < points.length && active[i];
+            if (isActive && runStart === -1) runStart = i;
+            if (!isActive && runStart !== -1) {
+                const mid = Math.floor((runStart + i - 1) / 2);
+                passes.push({ position: points[mid], start: times[runStart], end: times[i - 1] });
+                runStart = -1;
+            }
+        }
+
+        return { points, active, passes };
+    }, [satrec, trackKey, config.stationLat, config.stationLon]);
+
+    const trackPoints = trackData.points;
+    const trackActive = trackData.active;
+    const trackPasses = trackData.passes;
 
     const orbit: OrbitState | null = useMemo(
         () => (satrec ? propagateState(satrec, simDate) : null),
@@ -1477,11 +1858,13 @@ function SceneWrapper() {
     return (
         <div id="canvas-container" className="flex-1 relative dark">
             <KeyboardControls map={map}>
-                <Canvas shadows camera={{ position: [2.2 * R_EARTH, 0, 0], near: 0.1, far: R_EARTH * 3 }}>
+                <Canvas shadows camera={{ position: [2.2 * R_EARTH, 0, 0], near: 0.1, far: R_EARTH * 20 }}>
                     <ThreeScene
                         satrec={satrec}
                         simTimeRef={simTimeRef}
                         trackPoints={trackPoints}
+                        trackActive={trackActive}
+                        trackPasses={trackPasses}
                         quatText={quatText}
                         showOrbit={config.showOrbit}
                         showStation={config.showStation}
@@ -1572,6 +1955,7 @@ function SceneWrapper() {
                         satrec={satrec}
                         simTimeRef={simTimeRef}
                         trackPoints={trackPoints}
+                        trackActive={trackActive}
                         quatText={quatText}
                         showOrbit={config.showOrbit}
                     />

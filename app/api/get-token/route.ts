@@ -1,35 +1,33 @@
-import { NextApiRequest, NextApiResponse } from "next";
-import jwt from 'jsonwebtoken';
+import { auth } from "@/auth";
+import { headers } from "next/headers";
+import jwt from "jsonwebtoken";
 import { NextResponse } from "next/server";
 
-async function getUserFromReq(req: NextApiRequest) {
-    return { name: "Someone", id: "asdasdasd" };
-}
+export const dynamic = "force-dynamic";
 
-export async function GET(req: NextApiRequest) {
-    const user = await getUserFromReq(req);
-
-    console.log(user);
-
-    if (!user)
+export async function GET() {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (!session?.user) {
         return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    
-    const now = Math.floor(Date.now() / 1000);
-    const ttlSeconds = 60;
-    const payload = {
-        sub: user.id,
-        info: {
-            name: user.name
-        },
-        iat: now,
-        exp: now + ttlSeconds
-    };
+    }
 
     const secret = process.env.WS_JWT_SIGNING_HASH;
-    if (secret === undefined)
-        return NextResponse.json({ error: "Signing failure" }, { status: 401 });
+    if (!secret) {
+        return NextResponse.json({ error: "Signing not configured" }, { status: 500 });
+    }
 
-    const token = jwt.sign(payload, secret, { algorithm: 'HS256' });
+    const now = Math.floor(Date.now() / 1000);
+    const ttlSeconds = 60;
+    const token = jwt.sign(
+        {
+            sub: session.user.id,
+            info: { name: session.user.name },
+            iat: now,
+            exp: now + ttlSeconds,
+        },
+        secret,
+        { algorithm: "HS256" }
+    );
 
-    return NextResponse.json({ token, ttl: ttlSeconds }, { status: 200 });
+    return NextResponse.json({ token, ttl: ttlSeconds });
 }

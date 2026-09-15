@@ -15,3 +15,6 @@ export const DEFAULT_HOST_PARAMETERS: typeof process.env = {
 export const DEFAULT_TCP_PORT = 7070;
 
 export const DEFAULT_HTTP_PORT = 3000;
+
+// The gds-bridge host is server-only (GDS_BRIDGE_URL) and reached through
+// /api/scalar/* so uplink can't be issued from the browser without a session.

@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: washu-satellite/proto
+          path: external/proto
+
+      - uses: bufbuild/buf-setup-action@v1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: |
+          rm -f package-lock.json
+          npm install
+
+      - name: Generate protobuf code
+        run: buf generate external/proto
+
+      - name: Build
+        run: npm run build
+
+      - name: Typecheck (non-blocking)
+        if: always()
+        run: npx tsc --noEmit
+        continue-on-error: true
+
+      - name: Lint (non-blocking)
+        if: always()
+        run: npm run lint
+        continue-on-error: true

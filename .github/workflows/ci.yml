@@ -12,13 +12,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/checkout@v4
+        with:
+          repository: washu-satellite/proto
+          path: external/proto
+
+      - uses: bufbuild/buf-setup-action@v1
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: |
+          rm -f package-lock.json
+          npm install
+
+      - name: Generate protobuf code
+        run: buf generate external/proto
 
       - name: Build
         run: npm run build

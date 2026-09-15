@@ -1,4 +1,5 @@
-const POLL_MS = 15 * 60 * 1000;
+const PASS_POLL_MS = 15 * 60 * 1000;
+const TLE_POLL_MS = 60 * 60 * 1000;
 
 export async function register() {
     if (process.env.NEXT_RUNTIME !== "nodejs") return;
@@ -7,11 +8,17 @@ export async function register() {
     await ensureAuthSchema().catch((e) => console.error("auth schema setup failed", e));
 
     const { computeAndStorePassesForAllProjects } = await import("@/lib/pass-prediction");
+    const { refreshTleForAllProjects } = await import("@/lib/tle-refresh");
 
-    const run = () => {
+    const runPasses = () => {
         computeAndStorePassesForAllProjects().catch((e) => console.error("pass prediction cycle failed", e));
     };
+    const runTleRefresh = () => {
+        refreshTleForAllProjects().catch((e) => console.error("TLE refresh cycle failed", e));
+    };
 
-    run();
-    setInterval(run, POLL_MS);
+    runPasses();
+    runTleRefresh();
+    setInterval(runPasses, PASS_POLL_MS);
+    setInterval(runTleRefresh, TLE_POLL_MS);
 }

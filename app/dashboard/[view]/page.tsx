@@ -426,13 +426,13 @@ function ViewContent(props: {
     }
 }
 
-function ModeTrigger({ live }: { live: boolean }) {
+function ModeTrigger({ live, inPass }: { live: boolean; inPass: boolean }) {
     const [session, setSession] = useState("LIVE");
 
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                {live ? (
+                {live && inPass ? (
                     <div className="relative flex flex-row items-center gap-1 text-white rounded-sm bg-red-700 px-2 cursor-pointer">
                         <div className="relative">
                             <span className="absolute w-3 h-3 bg-white opacity-30 rounded-full -mt-0.5 -ml-0.5 animate-ping"/>
@@ -440,6 +440,11 @@ function ModeTrigger({ live }: { live: boolean }) {
                         </div>
 
                         <p className="font-bold font-mono text-sm">LIVE</p>
+                    </div>
+                ) : live ? (
+                    <div className="relative flex flex-row items-center gap-1 rounded-md bg-muted px-2 py-1 cursor-pointer">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500"/>
+                        <p className="font-bold font-mono text-sm text-muted-foreground">CONNECTED</p>
                     </div>
                 ) : (
                     <div className="relative flex flex-row items-center gap-1 rounded-md bg-muted px-2 py-1 cursor-pointer">
@@ -552,7 +557,7 @@ function Heading() {
                             </DropdownMenuGroup>
                         </DropdownMenuContent>
                     </DropdownMenu>
-                    <ModeTrigger live={connected} />
+                    <ModeTrigger live={connected} inPass={nextPass?.status === "active"} />
                     {nextPass?.status === "active" && (
                         <Tooltip>
                             <TooltipTrigger asChild>
@@ -565,7 +570,7 @@ function Heading() {
                                 </div>
                             </TooltipTrigger>
                             <TooltipContent side="bottom">
-                                A scheduled pass window is open right now, per the mission calendar. {nextPass.label}.
+                                A scheduled pass window is open right now, per the mission calendar. Ends in {nextPass.label}.
                             </TooltipContent>
                         </Tooltip>
                     )}
@@ -618,7 +623,7 @@ function Heading() {
                     )}
                 </div>
                 <div className="flex-row items-end gap-10 py-2 text-foreground/90 hidden lg:flex">
-                    <StatField title="Next Pass" value={nextPass?.label ?? "--"}/>
+                    <StatField title={nextPass?.status === "active" ? "Time Left" : "Next Pass"} value={nextPass?.label ?? "--"}/>
                     <StatField title="Health Status" value={live ? "NOMINAL" : "--"}/>
                     <StatField title="Current Mode" value={live ? "STANDBY" : "--"}/>
                     <StatField title="Link SNR" value={live ? "10.24" : "--"} units={live ? "dB" : undefined}/>

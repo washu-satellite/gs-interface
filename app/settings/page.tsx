@@ -13,6 +13,7 @@ import { useSettings } from "@/lib/settings";
 import { ProjectProvider, useProject } from "@/components/project-context";
 import { authClient } from "@/lib/auth-client";
 import { lastView } from "@/lib/last-view";
+import { SystemUpdateRow } from "@/components/system-update-row";
 import {
     ArrowLeft,
     Bell,
@@ -291,6 +292,7 @@ function SettingsBody() {
 
                 <Section icon={<Terminal className="w-4 h-4" />} title="About">
                     <Row label="Ground Station Interface" control={<span className="text-sm text-muted-foreground font-mono">v2.1.0</span>} />
+                    <SystemUpdateRow />
                 </Section>
             </div>
         </div>

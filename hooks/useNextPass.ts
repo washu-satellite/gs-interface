@@ -5,7 +5,8 @@ import { useEffect } from "react";
 import { bStore } from "@/hooks/useAppStore";
 import type { NextPassInfo } from "@/types/pass";
 
-const POLL_MS = 15000;
+const UPCOMING_POLL_MS = 5000;
+const ACTIVE_POLL_MS = 1000;
 
 type CalendarEventRow = {
     kind: string;
@@ -31,7 +32,7 @@ function computeNextPass(events: CalendarEventRow[]): NextPassInfo {
         const end = start + p.durationMin * 60_000;
         if (now >= start && now <= end) {
             const secondsRemaining = Math.round((end - now) / 1000);
-            return { status: "active", label: `ACTIVE - ends in ${formatDuration(secondsRemaining)}`, secondsRemaining };
+            return { status: "active", label: formatDuration(secondsRemaining), secondsRemaining };
         }
     }
 
@@ -42,7 +43,7 @@ function computeNextPass(events: CalendarEventRow[]): NextPassInfo {
 
     if (future.length > 0) {
         const secondsRemaining = Math.round((future[0] - now) / 1000);
-        return { status: "upcoming", label: `in ${formatDuration(secondsRemaining)}`, secondsRemaining };
+        return { status: "upcoming", label: formatDuration(secondsRemaining), secondsRemaining };
     }
 
     return { status: "none", label: "--", secondsRemaining: null };
@@ -66,8 +67,20 @@ export async function refreshNextPass(projectId: string) {
 export function useNextPassPoller(projectId: string | null | undefined) {
     useEffect(() => {
         if (!projectId) return;
-        refreshNextPass(projectId);
-        const iv = setInterval(() => refreshNextPass(projectId), POLL_MS);
-        return () => clearInterval(iv);
+        let alive = true;
+        let timer: ReturnType<typeof setTimeout>;
+
+        const tick = async () => {
+            await refreshNextPass(projectId);
+            if (!alive) return;
+            const status = bStore.getState().nextPass?.status;
+            timer = setTimeout(tick, status === "active" ? ACTIVE_POLL_MS : UPCOMING_POLL_MS);
+        };
+
+        tick();
+        return () => {
+            alive = false;
+            clearTimeout(timer);
+        };
     }, [projectId]);
 }

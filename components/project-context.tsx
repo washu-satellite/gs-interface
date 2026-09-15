@@ -74,6 +74,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
             });
             const updated: Project = await res.json();
             setProjects((ps) => ps.map((p) => (p.id === updated.id ? updated : p)));
+            fetch(`/api/projects/${activeId}/calendar/predict`, { method: "POST" }).catch(() => {});
         },
         [activeId]
     );

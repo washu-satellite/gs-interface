@@ -83,13 +83,45 @@ export type PassWindow = { start: Date; end: Date; maxElevationDeg: number };
 
 export const MIN_ELEVATION_DEG = 10;
 
-export function elevationDeg(rec: SatRec, date: Date, observerGd: { latitude: number; longitude: number; height: number }): number | null {
+export type LookAngle = { azimuthDeg: number; elevationDeg: number; rangeKm: number };
+
+export function lookAngle(
+    rec: SatRec,
+    date: Date,
+    observerGd: { latitude: number; longitude: number; height: number }
+): LookAngle | null {
     const pv = propagate(rec, date);
     if (!pv || !pv.position || typeof pv.position === "boolean") return null;
     const gmst = gstime(date);
     const ecf = eciToEcf(pv.position, gmst); // azimuth/elevation/range coords
-    const look = ecfToLookAngles(observerGd, ecf); // Look angle of the ground station
-    return look.elevation * (180 / Math.PI);
+    const look = ecfToLookAngles(observerGd, ecf); // Look angle from the ground station
+    const azimuthDeg = (((look.azimuth * (180 / Math.PI)) % 360) + 360) % 360;
+    return { azimuthDeg, elevationDeg: look.elevation * (180 / Math.PI), rangeKm: look.rangeSat };
+}
+
+export function elevationDeg(rec: SatRec, date: Date, observerGd: { latitude: number; longitude: number; height: number }): number | null {
+    return lookAngle(rec, date, observerGd)?.elevationDeg ?? null;
+}
+
+/**
+ * Seconds from `from` until elevation first reaches `minElevationDeg` within
+ * the next `windowSec` seconds, or null if it doesn't within that window.
+ * Returns 0 if already above the threshold right now.
+ */
+export function secondsUntilVisible(
+    rec: SatRec,
+    observerGd: { latitude: number; longitude: number; height: number },
+    from: Date,
+    windowSec: number,
+    minElevationDeg = MIN_ELEVATION_DEG,
+    stepSec = 1
+): number | null {
+    for (let t = 0; t <= windowSec; t += stepSec) {
+        const date = new Date(from.getTime() + t * 1000);
+        const elev = elevationDeg(rec, date, observerGd);
+        if (elev !== null && elev >= minElevationDeg) return t;
+    }
+    return null;
 }
 
 export function computePasses(

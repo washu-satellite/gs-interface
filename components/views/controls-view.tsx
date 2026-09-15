@@ -1370,24 +1370,36 @@ function PlaybackControls(props: {
     offsetMin: number;
     playing: boolean;
     simDate: Date;
+    live: boolean;
     disabled?: boolean;
     onScrub: (min: number) => void;
     onToggle: () => void;
     onSkipStart: () => void;
     onSkipEnd: () => void;
+    onGoLive: () => void;
 }) {
     return (
         <div className="flex flex-col items-center gap-3 bg-black/50 backdrop-blur-xl border rounded-xl px-5 py-3">
             <div className="flex flex-row items-baseline gap-3 font-mono text-sm">
                 <span className="text-foreground">{formatUtc(props.simDate)}</span>
-                <span className="text-xs text-muted-foreground">{formatOffset(props.offsetMin)}</span>
+                {props.live ? (
+                    <span className="flex flex-row items-center gap-1 text-xs font-semibold text-emerald-400">
+                        <span className="relative flex h-1.5 w-1.5">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                        </span>
+                        LIVE
+                    </span>
+                ) : (
+                    <span className="text-xs text-muted-foreground">{formatOffset(props.offsetMin)}</span>
+                )}
             </div>
             <Slider
                 className="w-[24rem]"
                 min={0}
                 max={SIM_WINDOW_MIN}
                 step={1}
-                value={[props.offsetMin]}
+                value={[Math.min(SIM_WINDOW_MIN, props.offsetMin)]}
                 onValueChange={([v]) => props.onScrub(v)}
                 disabled={props.disabled}
             />
@@ -1400,6 +1412,14 @@ function PlaybackControls(props: {
                 </Button>
                 <Button variant="outline" className="backdrop-blur-md" onClick={props.onSkipEnd} disabled={props.disabled}>
                     <SkipForward />
+                </Button>
+                <Button
+                    variant={props.live ? "default" : "outline"}
+                    className="backdrop-blur-md"
+                    onClick={props.onGoLive}
+                    disabled={props.disabled || props.live}
+                >
+                    Live
                 </Button>
             </div>
         </div>
@@ -1746,8 +1766,31 @@ function SceneWrapper() {
     const offsetRef = useRef<number>(0);
     const [offsetMin, setOffsetMin] = useState(0);
     const [playing, setPlaying] = useState(false);
+    const [simLive, setSimLive] = useState(true);
+    const [liveNow, setLiveNow] = useState<number>(() => Date.now());
 
-    const simDate = useMemo(() => new Date(epochRef.current + offsetMin * 60000), [offsetMin]);
+    useEffect(() => {
+        if (!simLive) return;
+        let raf = 0;
+        const tick = () => {
+            simTimeRef.current = Date.now();
+            raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf);
+    }, [simLive]);
+
+    useEffect(() => {
+        if (!simLive) return;
+        setLiveNow(Date.now());
+        const iv = setInterval(() => setLiveNow(Date.now()), 1000);
+        return () => clearInterval(iv);
+    }, [simLive]);
+
+    const simDate = useMemo(
+        () => (simLive ? new Date(liveNow) : new Date(epochRef.current + offsetMin * 60000)),
+        [simLive, liveNow, offsetMin]
+    );
 
     const setOffset = useCallback((min: number) => {
         const clamped = Math.max(0, Math.min(SIM_WINDOW_MIN, min));
@@ -1779,14 +1822,16 @@ function SceneWrapper() {
     }, [playing]);
 
     const toggle = () => {
+        setSimLive(false);
         if (offsetRef.current >= SIM_WINDOW_MIN) setOffset(0);
         setPlaying((p) => !p);
     };
-    const skipStart = () => { setPlaying(false); setOffset(0); };
-    const skipEnd = () => { setPlaying(false); setOffset(SIM_WINDOW_MIN); };
-    const scrub = (min: number) => { setPlaying(false); setOffset(min); };
+    const skipStart = () => { setSimLive(false); setPlaying(false); setOffset(0); };
+    const skipEnd = () => { setSimLive(false); setPlaying(false); setOffset(SIM_WINDOW_MIN); };
+    const scrub = (min: number) => { setSimLive(false); setPlaying(false); setOffset(min); };
+    const goLiveSim = () => { setPlaying(false); setSimLive(true); };
 
-    const trackKey = Math.floor(offsetMin / 15);
+    const trackKey = simLive ? Math.floor((liveNow - epochRef.current) / 60000 / 15) : Math.floor(offsetMin / 15);
     const trackData = useMemo(() => {
         const empty = { points: [] as THREE.Vector3[], active: [] as boolean[], passes: [] as TrackPassInfo[] };
         if (!satrec) return empty;
@@ -1937,14 +1982,16 @@ function SceneWrapper() {
             <div className="absolute bottom-0 left-0 m-4 flex flex-row items-center justify-center w-full">
                 <div className="shrink-0 relative">
                     <PlaybackControls
-                        offsetMin={offsetMin}
+                        offsetMin={simLive ? (liveNow - epochRef.current) / 60000 : offsetMin}
                         playing={playing}
                         simDate={simDate}
+                        live={simLive}
                         disabled={!satrec}
                         onScrub={scrub}
                         onToggle={toggle}
                         onSkipStart={skipStart}
                         onSkipEnd={skipEnd}
+                        onGoLive={goLiveSim}
                     />
                 </div>
             </div>

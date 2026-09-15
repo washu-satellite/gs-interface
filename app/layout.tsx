@@ -4,6 +4,7 @@ import "./globals.css";
 import AppContext, { AppContextProvider } from "@/components/app-context";
 import { cn } from "@/lib/utils";
 import { bStore } from "@/hooks/useAppStore";
+import { UpdateBanner } from "@/components/update-banner";
 
 export const metadata: Metadata = {
   title: "GS 2.1.0",
@@ -18,6 +19,7 @@ export default function RootLayout({
   return (
     <html lang="en">
         <AppContextProvider>
+          <UpdateBanner />
           {children}
         </AppContextProvider>
     </html>
